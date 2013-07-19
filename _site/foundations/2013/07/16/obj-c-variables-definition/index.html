@@ -1,0 +1,332 @@
+
+<!DOCTYPE html>
+<!--[if lt IE 7]> <html class="no-js lt-ie9 lt-ie8 lt-ie7 ie" lang="en"> <![endif]-->
+<!--[if IE 7]>    <html class="no-js lt-ie9 lt-ie8 ie" lang="en"> <![endif]-->
+<!--[if IE 8]>    <html class="no-js lt-ie9 ie" lang="en"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en"> <!--<![endif]-->
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>Objective C ivars' definition</title>
+	<meta name="author" content="Kevin Gao">
+	<link href='/assets/themes/the-minimum/css/style.css' rel="stylesheet" media="all">
+	<link href="http://feeds.feedburner.com/" rel="alternate" title="Objective C ivars' definition" type="application/atom+xml">
+	<script src="http://cdnjs.cloudflare.com/ajax/libs/modernizr/2.0.6/modernizr.min.js"></script>
+</head>
+<body>
+
+<div id="page" class="hentry">
+	<header class="the-header">
+		<div class="unit-head">
+			<div class="unit-inner unit-head-inner">
+				<p class="logo"><a href="/">Xmkevin's Blog</a></p>
+				<nav class="nav-global">
+					<ul>
+						<li class="archive"><a href="/archive.html">archive</a></li>
+						<li class="page"><a href="/pages.html">pages</a></li>
+						<li class="category"><a href="/categories.html">categories</a></li>
+						<li class="tag"><a href="/tags.html">tags</a></li>
+						<li class="forkme"><iframe src="http://markdotto.github.com/github-buttons/github-btn.html?user=plusjade&repo=jekyll-bootstrap&type=fork&count=true"
+								allowtransparency="true" frameborder="0" scrolling="0" width="95px" height="20px"></iframe></li>
+					</ul>
+				</nav>
+			</div><!-- unit-inner -->
+		</div><!-- unit-head -->
+	</header>
+	<div class="body" role="main">
+		<div class="unit-body">
+			<div class="unit-inner unit-body-inner">
+				<div class="entry-content">
+					
+<article class="unit-article layout-post">
+	<div class="unit-inner unit-article-inner">
+		<div class="content">
+			<header>
+				<div class="unit-head">
+					<div class="unit-inner unit-head-inner">
+						<h1 class="h2 entry-title">Objective C ivars' definition</h1>
+					</div><!-- unit-inner -->
+				</div><!-- unit-head -->
+			</header>
+
+			<div class="bd">
+				<div class="entry-content">
+					<p>When I first learned obj-c, I confused on how to declare an instance variable properly, because there are so many ways to do it. This article is trying to figure out the differences of defining an instance variable and find the right way to create an instance variable in the right place.</p>
+
+<h3 id='decalre_ivars_in_header'>Decalre ivars in Header</h3>
+
+<p>Let&#8217;s see the following code firstly, we define a Person class, which has name and age.</p>
+<div class='highlight'><pre><code class='objc'><span class='cp'>#import &lt;Foundation/Foundation.h&gt;</span>
+
+<span class='k'>@interface</span> <span class='nc'>Person</span> : <span class='nc'>NSObject</span>
+<span class='p'>{</span>
+    <span class='kt'>int</span> <span class='n'>_age</span><span class='p'>;</span>
+    <span class='n'>NSString</span> <span class='o'>*</span><span class='n'>_name</span><span class='p'>;</span>
+<span class='p'>}</span>
+
+<span class='o'>-</span><span class='p'>(</span><span class='kt'>id</span><span class='p'>)</span><span class='n'>initWithName</span><span class='o'>:</span><span class='p'>(</span><span class='n'>NSString</span> <span class='o'>*</span><span class='p'>)</span><span class='n'>name</span> <span class='n'>andAge</span><span class='o'>:</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span><span class='n'>age</span><span class='p'>;</span>
+
+<span class='k'>-</span><span class='p'>(</span><span class='kt'>void</span><span class='p'>)</span><span class='nf'>introduceMyself</span><span class='p'>;</span>
+
+<span class='k'>@end</span>
+
+<span class='c1'>//Implementation</span>
+
+<span class='cp'>#import &quot;Person.h&quot;</span>
+
+<span class='k'>@implementation</span> <span class='nc'>Person</span>
+
+<span class='k'>-</span><span class='p'>(</span><span class='kt'>id</span><span class='p'>)</span><span class='nf'>initWithName:</span><span class='p'>(</span><span class='n'>NSString</span> <span class='o'>*</span><span class='p'>)</span><span class='nv'>name</span> <span class='nf'>andAge:</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span><span class='nv'>age</span>
+<span class='p'>{</span>
+    <span class='n'>self</span> <span class='o'>=</span> <span class='p'>[</span><span class='n'>super</span> <span class='n'>init</span><span class='p'>];</span>
+    
+    <span class='k'>if</span><span class='p'>(</span><span class='n'>self</span><span class='p'>)</span>
+    <span class='p'>{</span>
+        <span class='n'>_name</span> <span class='o'>=</span> <span class='n'>name</span><span class='p'>;</span>
+        <span class='n'>_age</span> <span class='o'>=</span> <span class='n'>age</span><span class='p'>;</span>
+    <span class='p'>}</span>
+    
+    <span class='k'>return</span> <span class='n'>self</span><span class='p'>;</span>
+<span class='p'>}</span>
+
+<span class='k'>-</span><span class='p'>(</span><span class='kt'>void</span><span class='p'>)</span><span class='nf'>introduceMyself</span>
+<span class='p'>{</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;My name is %@, I am %d&quot;</span><span class='p'>,</span> <span class='n'>_name</span><span class='p'>,</span><span class='n'>_age</span><span class='p'>);</span>
+<span class='p'>}</span>
+
+<span class='k'>@end</span>
+</code></pre></div>
+<p>It looks great, but what if I need some ivars which are not belonged to Person, just for computing or something else, should I declare them in header ?</p>
+<div class='highlight'><pre><code class='objc'><span class='cp'>#import &lt;Foundation/Foundation.h&gt;</span>
+
+<span class='k'>@interface</span> <span class='nc'>Person</span> : <span class='nc'>NSObject</span>
+<span class='p'>{</span>
+    <span class='kt'>int</span> <span class='n'>_age</span><span class='p'>;</span>
+    <span class='n'>NSString</span> <span class='o'>*</span><span class='n'>_name</span><span class='p'>;</span>
+
+    <span class='kt'>int</span> <span class='n'>_introduceCount</span><span class='p'>;</span>
+<span class='p'>}</span>
+
+<span class='o'>-</span><span class='p'>(</span><span class='kt'>id</span><span class='p'>)</span><span class='n'>initWithName</span><span class='o'>:</span><span class='p'>(</span><span class='n'>NSString</span> <span class='o'>*</span><span class='p'>)</span><span class='n'>name</span> <span class='n'>andAge</span><span class='o'>:</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span><span class='n'>age</span><span class='p'>;</span>
+
+<span class='k'>-</span><span class='p'>(</span><span class='kt'>void</span><span class='p'>)</span><span class='nf'>introduceMyself</span><span class='p'>;</span>
+
+<span class='k'>@end</span>
+
+<span class='c1'>//Implementation</span>
+
+<span class='cp'>#import &quot;Person.h&quot;</span>
+
+<span class='k'>@implementation</span> <span class='nc'>Person</span>
+
+<span class='k'>-</span><span class='p'>(</span><span class='kt'>id</span><span class='p'>)</span><span class='nf'>initWithName:</span><span class='p'>(</span><span class='n'>NSString</span> <span class='o'>*</span><span class='p'>)</span><span class='nv'>name</span> <span class='nf'>andAge:</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span><span class='nv'>age</span>
+<span class='p'>{</span>
+    <span class='n'>self</span> <span class='o'>=</span> <span class='p'>[</span><span class='n'>super</span> <span class='n'>init</span><span class='p'>];</span>
+    
+    <span class='k'>if</span><span class='p'>(</span><span class='n'>self</span><span class='p'>)</span>
+    <span class='p'>{</span>
+        <span class='n'>_name</span> <span class='o'>=</span> <span class='n'>name</span><span class='p'>;</span>
+        <span class='n'>_age</span> <span class='o'>=</span> <span class='n'>age</span><span class='p'>;</span>
+        <span class='n'>_introduceCount</span> <span class='o'>=</span> <span class='mi'>0</span><span class='p'>;</span>
+    <span class='p'>}</span>
+    
+    <span class='k'>return</span> <span class='n'>self</span><span class='p'>;</span>
+<span class='p'>}</span>
+
+<span class='k'>-</span><span class='p'>(</span><span class='kt'>void</span><span class='p'>)</span><span class='nf'>introduceMyself</span>
+<span class='p'>{</span>
+    <span class='n'>_introduceCount</span><span class='o'>++</span><span class='p'>;</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;My name is %@, I am %d. I have introduced myself %d times.&quot;</span><span class='p'>,</span> <span class='n'>_name</span><span class='p'>,</span><span class='n'>_age</span><span class='p'>,</span> <span class='n'>_introduceCount</span><span class='p'>);</span>
+<span class='p'>}</span>
+
+<span class='k'>@end</span>
+</code></pre></div>
+<p>If I want to use the Person class, what I care is the introduceMyself method, I don&#8217;t care what ivars it defines. Therefore, it seems it is not a good idea to define ivars in header file. The header file is the interface for the class, everyone who wants to invoke the class does not care about what non-public ivars it has. Yes, there are some other ways to define ivars.</p>
+
+<h3 id='declare_ivars_in_extension'>Declare ivars in Extension</h3>
+
+<p>Let&#8217;s take a look at the following code too.</p>
+<div class='highlight'><pre><code class='objc'><span class='c1'>//Extension</span>
+<span class='k'>@interface</span> <span class='nc'>Person</span><span class='p'>()</span>
+<span class='p'>{</span>
+    <span class='n'>NSString</span> <span class='o'>*</span><span class='n'>_name</span><span class='p'>;</span>
+    <span class='kt'>int</span> <span class='n'>_age</span><span class='p'>;</span>
+    <span class='kt'>int</span> <span class='n'>_introduceCount</span><span class='p'>;</span>
+<span class='p'>}</span>
+
+<span class='k'>@end</span>
+</code></pre></div>
+<p>We define ivars in Extension. The ivars in Extension are private. Now the header file is cleaner. Extension is used to declare private ivars, properties and methods. Here is another question: why should we use Extension, can we define them in Implementation directly? The answer is yes.</p>
+
+<h3 id='declare_ivars_in_implementation'>Declare ivars in Implementation</h3>
+
+<p>Declaring iVars inside the implementation is definately a new construct in objective C. You need to be using xcode4.2 and have the LLVM compiler selected in your build settings. The idea is to keep your header files cleaner(from stackoverflow). So now, we can declare ivars in Implementation drectly like this:</p>
+<div class='highlight'><pre><code class='objc'><span class='c1'>//Implementation</span>
+<span class='k'>@implementation</span> <span class='nc'>Person</span>
+<span class='p'>{</span>
+    <span class='kt'>int</span> <span class='n'>_age</span><span class='p'>;</span>
+    <span class='n'>NSString</span> <span class='o'>*</span><span class='n'>_name</span><span class='p'>;</span>
+<span class='p'>}</span>
+
+<span class='o'>-</span><span class='p'>(</span><span class='kt'>id</span><span class='p'>)</span><span class='n'>initWithName</span><span class='o'>:</span><span class='p'>(</span><span class='n'>NSString</span> <span class='o'>*</span><span class='p'>)</span><span class='n'>name</span> <span class='n'>andAge</span><span class='o'>:</span><span class='p'>(</span><span class='kt'>int</span><span class='p'>)</span><span class='n'>age</span>
+<span class='p'>{</span>
+    <span class='n'>self</span> <span class='o'>=</span> <span class='p'>[</span><span class='n'>super</span> <span class='n'>init</span><span class='p'>];</span>
+    
+    <span class='k'>if</span><span class='p'>(</span> <span class='n'>self</span><span class='p'>)</span>
+    <span class='p'>{</span>
+        <span class='n'>_name</span> <span class='o'>=</span> <span class='n'>name</span><span class='p'>;</span>
+        <span class='n'>_age</span> <span class='o'>=</span> <span class='n'>age</span><span class='p'>;</span>
+    <span class='p'>}</span>
+    
+    <span class='k'>return</span> <span class='n'>self</span><span class='p'>;</span>
+<span class='p'>}</span>
+
+<span class='o'>-</span><span class='p'>(</span><span class='kt'>void</span><span class='p'>)</span><span class='n'>introduceMyself</span>
+<span class='p'>{</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;My name is %@, I am %d&quot;</span><span class='p'>,</span> <span class='n'>_name</span><span class='p'>,</span><span class='n'>_age</span><span class='p'>);</span>
+<span class='p'>}</span>
+
+<span class='k'>@end</span>
+</code></pre></div>
+<h3 id='conclution'>Conclution</h3>
+
+<p>Although we can define ivars in Header, Extension and Implementation. To make the header cleaner, we should only declare public and protected ivars in header. If you are using xcode4.2 or above and select the LLVM compiler, you can declare private ivars and methods inside Implementation directly.</p>
+					<div class="meta">
+						<p class="date-publish">
+							Published: 
+							<date class="date-pub" title="2013-07-16T00:00:00+08:00" datetime="2013-07-16T00:00:00+08:00" pubdate>
+							<span class="month"><abbr>July</abbr></span>
+							<span class="day">16</span>
+							<span class="year">2013</span>
+							</date>
+						</p>
+						<ul class="list-category list-linear">
+							<li class="list-head">category: </li>
+							
+							
+
+
+  
+     
+    	<li><a href="/categories.html#foundations-ref">
+    		foundations <span>1</span>
+    	</a></li>
+    
+  
+
+
+						</ul>
+						<ul class="list-tag list-linear">
+							<li class="list-head">tags: </li>
+							
+							
+
+
+  
+     
+    	<li><a href="/tags.html#objc-ref">objc <span>1</span></a></li>
+    
+  
+
+
+
+						</ul>
+					</div><!-- meta -->
+				</div><!-- entry-content -->
+				<div class="misc-content">
+					<div class="social">
+						<ul class="list-linear">
+							<li><div class="twitter-tweet"><a href="https://twitter.com/share" class="twitter-share-button" data-count="horizontal" data-via="gaoyq" data-lang="en">Tweet</a></div></li>
+							<li><div class="twitter-follow"><a href="https://twitter.com/gaoyq" class="twitter-follow-button" data-show-count="false" data-lang="en"></a></div></li>
+						</ul>
+					</div>
+					
+					
+
+
+  <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_developer = 1;
+    var disqus_shortname = 'xmkevin'; // required: replace example with your forum shortname
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">blog comments powered by <span class="logo-disqus">Disqus</span></a>
+
+
+
+
+				</div><!-- misc-content -->
+				
+			</div><!-- bd -->
+			<footer class="unit-foot">
+				<div class="unit-inner unit-foot-inner">
+					<nav class="pagination">
+						<ul>
+							
+							
+							
+						</ul>
+					</nav>
+					<p class="gotop">
+						<a href="#page">Back to Top</a>
+					</p>
+				</div>
+			</footer>
+
+		</div><!-- content -->
+	</div><!-- unit-inner -->
+</article>
+
+
+				</div>
+			</div><!-- unit-inner -->
+		</div><!-- unit-body -->
+	</div><!-- body -->
+	<footer class="the-footer">
+		<div class="unit-foot">
+			<div class="unit-inner unit-foot-inner">
+				<div class="misc vcard">
+					<h4>about</h4>
+					<ul>
+						<li class="contact"><address><span class="author fn n">Kevin Gao</span> - <span class="fn email">tsing.gao@gmail.com</span></address></li>
+						<li class="github"><a href="http://github.com/xmkevin/" rel="me">github.com/xmkevin</a></li>
+						<li class="twitter"><a href="http://twitter.com/gaoyq/" rel="me">twitter.com/gaoyq</a></li>
+						<li class="rss"><a href="http://feeds.feedburner.com/">Subscribe to RSS Feed</a></li>
+					</ul>
+				</div><!-- misc -->
+				<p class="licence">
+					Theme: <a href="http://layouts-the.me">the_minimum</a> based on <a href="http://jekyllbootstrap.com/">Jekyll-bootstrap</a>.<br>
+					Powered by <a href="https://github.com/mojombo/jekyll">Jekyll</a>.
+				</p>
+			</div><!-- unit-foot-inner -->
+		</div><!-- unit-foot -->
+	</footer>
+</div><!-- page -->
+<script>
+	(function(d, s) {
+		var js, fjs = d.getElementsByTagName(s)[0], load = function(url, id) {
+		if (d.getElementById(id)) {return;}
+		js = d.createElement(s); js.src = url; js.id = id;
+		fjs.parentNode.insertBefore(js, fjs);
+		};
+	load('//platform.twitter.com/widgets.js', 'tweetjs');
+	// load('https://apis.google.com/js/plusone.js', 'gplus1js'); // Checkout http://j.mp/ApDgMr for usage html for this is <div class="g-plusone" data-size="medium"></div>
+	// load('//connect.facebook.net/en_US/all.js#xfbml=1', 'fbjssdk'); // Checkout http://j.mp/wZw2xR for using open graph protorol html for this is <div class="fb-like" data-href="/foundations/2013/07/16/obj-c-variables-definition" data-send="false" data-layout="button_count" data-width="450" data-show-faces="false" data-font="verdana"></div>
+	}(document, 'script'));
+</script>
+<script>
+/*! A fix for the iOS orientationchange zoom bug.Script by @scottjehl, rebound by @wilto. MIT License.*/
+(function(j){var i=j.document;if(!i.querySelectorAll){return}var l=i.querySelectorAll("meta[name=viewport]")[0],a=l&&l.getAttribute("content"),h=a+", maximum-scale=1.0",d=a+", maximum-scale=10.0",g=true,c=j.orientation,k=0;if(!l){return}function f(){l.setAttribute("content",d);g=true}function b(){l.setAttribute("content",h);g=false}function e(m){c=Math.abs(j.orientation);k=Math.abs(m.gamma);if(k>8&&c===0){if(g){b()}}else{if(!g){f()}}}j.addEventListener("orientationchange",f,false);j.addEventListener("deviceorientation",e,false)})(this);
+</script>
+
+  
+</body>
+</html>
+
