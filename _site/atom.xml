@@ -4,7 +4,7 @@
  <title>Xmkevin's Blog</title>
  <link href="http://xmkevin.github.io/" rel="self"/>
  <link href="http://xmkevin.github.io"/>
- <updated>2013-07-19T10:44:01+08:00</updated>
+ <updated>2014-01-23T16:57:37+08:00</updated>
  <id>http://xmkevin.github.io</id>
  <author>
    <name>Kevin Gao</name>
@@ -13,148 +13,526 @@
 
  
  <entry>
+   <title>How to use Blocks with GCD correctly to avoid retain cycle</title>
+   <link href="http://xmkevin.github.io/foundations/2014/01/19/how-to-use-blocks-with-gcd-correctly-to-avoid-retain-cycle"/>
+   <updated>2014-01-19T00:00:00+08:00</updated>
+   <id>http://xmkevin.github.io/foundations/2014/01/19/how-to-use-blocks-with-gcd-correctly-to-avoid-retain-cycle</id>
+   <content type="html">&lt;p&gt;This is an translation article from &lt;a href=&quot;http://tanqisen.github.io/blog/2013/04/19/gcd-block-cycle-retain/&quot;&gt;Chinese&lt;/a&gt;. I am trying my best to translate it, but because of my English limitation, it maybe not be translated exactly, if you have any question, please leave a comment.&lt;/p&gt;
+
+&lt;h2 id=&quot;intro_of_block&quot;&gt;Intro of Block&lt;/h2&gt;
+
+&lt;p&gt;As an extension of C, Block is not a new technology, while it is the same technology as closure and lambda expression of other languages. We should notice that there is not a GC for Objective-C in iOS, we should manage the memory by ourselves, and memory management for block is the point where we usually make mistakes. Error memory management could cause retain cycle or crash. Block is like function pointer, but the most difference of Block and function pointer is : Block can access external variables which are not in the function scope. In other words, Block is a function with execution context.&lt;/p&gt;
+
+&lt;p&gt;You can think that Block contains two compoments&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;The code that Block executes, which is generated when being compiled.&lt;/li&gt;
+
+&lt;li&gt;A data structure contains the external variables that the Block needs when execution.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Another difference of Block and Function pointer is that Block can be managed by &lt;code&gt;autoreleasepool&lt;/code&gt; like Objective C object (But Block is not equal to Obj-C object, we will explain it later).&lt;/p&gt;
+
+&lt;h2 id=&quot;basic_syntax_of_block&quot;&gt;Basic syntax of Block&lt;/h2&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;c1&#39;&gt;// declare a Block variable&lt;/span&gt;
+&lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;nb&#39;&gt;nil&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;c1&#39;&gt;// sum is a Block variable, the Block type has two int parameters and a long return type.&lt;/span&gt;
+
+&lt;span class=&#39;c1&#39;&gt;// Define a Block and assign it to sum&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+	&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;span class=&#39;c1&#39;&gt;// Invoke the Block&lt;/span&gt;
+&lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;s&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;2&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Define a function which returns a block:&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;))&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;sumBlock&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+	&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;=&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+	&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;
+	&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+		&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+
+	&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;copy&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Looks strange? For looking comfortable, we can typedef the Block&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;k&#39;&gt;typedef&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;sumBlock&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+	&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+	&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;
+	&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+		&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+	&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+	&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;copy&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id=&quot;memory_locations_of_block&quot;&gt;Memory locations of Block&lt;/h2&gt;
+
+&lt;p&gt;There are 3 types of Block according to the Block’s position in memory, which are NSGlobakBlock, NSStackBlock and NSMallocBlock.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;NSGlobakBlock : like function, in text area;&lt;/li&gt;
+
+&lt;li&gt;NSStackBlock : In Stack memory, would be released when function returned;&lt;/li&gt;
+
+&lt;li&gt;NSMallocBlock : In Heap memory;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk1&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+	&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;blk1 = %@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk1&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// blk1 = &amp;lt;__NSGlobalBlock__: 0x47d0&amp;gt;&lt;/span&gt;
+
+&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk2&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+	&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;blk2 = %@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk2&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// blk2 = &amp;lt;__NSStackBlock__: 0xbfffddf8&amp;gt;&lt;/span&gt;
+
+&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk3&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;blk2&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;copy&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;blk3 = %@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk3&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// blk3 = &amp;lt;__NSMallocBlock__: 0x902fda0&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Why the type of blk1 is NSGlobalBlock but the type of blk2 is NSStackBlock? The difference between blk1 and blk2 is that blk1 doesn’t use any variable outside of the Block, therefore, it does not need to capture local variables, which make it the same as Function. I guess that the compiler put blk1 in the text area by the memory address 0x47d0. The only difference between blk2 and blk1 is blk2 uses the local variable base, while &lt;em&gt;defining&lt;/em&gt; (not executing ) blk2, base was copied to the stack to be used by the Block. Executing the following code, the result is 203 rather than 204.&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;base&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;++&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;printf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;%ld&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;2&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;));&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;In the Block, base is readonly, if we want to change the value of base, we should define it by appending &lt;code&gt;__block&lt;/code&gt; attribute : &lt;code&gt;__block int base = 100&lt;/code&gt;;&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;__block&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;10&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;base&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;++&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;printf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;%ld&lt;/span&gt;&lt;span class=&#39;se&#39;&gt;\n&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;2&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;));&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;printf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;%d&lt;/span&gt;&lt;span class=&#39;se&#39;&gt;\n&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;base&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The console will print 214, 211. When using &lt;code&gt;__block&lt;/code&gt; to declare a variable, the runtime value will be used instead of definition value. On the above example, when runing &lt;code&gt;sum(1,2)&lt;/code&gt;, base will get the value of base++, which is 201, and then execute Block &lt;code&gt;base+=10; base+a+b;&lt;/code&gt;, the result is 214. When Block execution finished, base has become 211.&lt;/p&gt;
+
+&lt;h2 id=&quot;copy_retain_release_a_block&quot;&gt;Copy, retain, release a Block&lt;/h2&gt;
+
+&lt;p&gt;Differences to NSObject’s copy, retain and release:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Block_copy equals to copy and Block_release equals to release;&lt;/li&gt;
+
+&lt;li&gt;Retain, copy and release a Block won’t change the retainCount, the retainCount remains 1;&lt;/li&gt;
+
+&lt;li&gt;NSGlobalBlock: retain,copy and release are invalid;&lt;/li&gt;
+
+&lt;li&gt;NSStackBlock: retain and release operation are invalid. We should notice that the Block memory will be recycled when the NSStackBlock returns even it has been retained. A common mistake is &lt;code&gt;[mutableArray addObject:stackBlock]&lt;/code&gt;, when the function is poped out of the stack, the stackBlock is recycled. The correct way is copy the block to the Heap firstly: &lt;code&gt;[mutableArray addObject:[[stackBlock copy] autorelease]&lt;/code&gt;. Copy the block to generate a new NSMallocBlock object.&lt;/li&gt;
+
+&lt;li&gt;NSMallocBlock: supports retain and release. Although the retainCount remains 1, but the memory management will increase and reduce the count. Copying a NSMallocBlock won’t create a new instance, but it increase a reference count, like retain;&lt;/li&gt;
+
+&lt;li&gt;Avoid retain a Block.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;different_types_of_variable_in_block&quot;&gt;Different types of variable in Block&lt;/h2&gt;
+
+&lt;h3 id=&quot;basic_types&quot;&gt;Basic types&lt;/h3&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Local variables are readonly in Block. Block copys the variable value in definition, therefore, even the variable value has been changed outside of the Block, the variable value in the Block would stay the same.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;c1&#39;&gt;// base++; compile error, readonly&lt;/span&gt;
+  &lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;0&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;printf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;%ld&lt;/span&gt;&lt;span class=&#39;se&#39;&gt;\n&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;2&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;));&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// The output is 103 rather than 3&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;ul&gt;
+&lt;li&gt;+static+ variables and global variables. If we change the base variable to static or global on above example, it can be readed and written in Block. Because global and static variables have fixed memory locations, Block reads the new value from memory directly, but not copied constant value in definition.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;k&#39;&gt;static&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;++&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+  &lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;0&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;printf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;%d&lt;/span&gt;&lt;span class=&#39;se&#39;&gt;\n&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;printf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;%ld&lt;/span&gt;&lt;span class=&#39;se&#39;&gt;\n&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;mi&#39;&gt;2&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;));&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// The output is 4 instead of 104&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;printf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;%d&lt;/span&gt;&lt;span class=&#39;se&#39;&gt;\n&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The outputs are &lt;code&gt;0 4 1&lt;/code&gt;, which indicates changing base outside of Block affects the value in the Block and vice versa.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Block variable, variables with &lt;code&gt;__block&lt;/code&gt; are called Block variables. Basic types of Block variables are equal to static and global variables.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;assuming_block1_is_used_by_block2_when_block2_is_copied_to_heap_block1_is_copied_too_but_if_block1_is_a_parameter_it_wont_be_copied&quot;&gt;Assuming block1 is used by block2, when block2 is copied to Heap, block1 is copied too. But if block1 is a parameter, it won’t be copied.&lt;/h3&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;foo&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;()&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;100&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;long&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;return&lt;/span&gt;  &lt;span class=&#39;n&#39;&gt;base&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;a&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;+&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;b&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+  &lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// &amp;lt;__NSStackBlock__: 0xbfffdb40&amp;gt;&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;bar&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+
+&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;bar&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;sum_blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum_blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// The same as above, won&amp;#39;t copied as a parameter&lt;/span&gt;
+
+  &lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;BlkSum&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;     &lt;span class=&#39;c1&#39;&gt;// No matter blk is in Stack or Heap, Block wount&amp;#39; be copied as a parameter&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum_blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// When blk is copied to the Heap, sum_blk is copied too.&lt;/span&gt;
+  &lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum_blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// blk is on Stack&lt;/span&gt;
+
+  &lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;copy&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;sum_blk&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt; &lt;span class=&#39;c1&#39;&gt;// blk is on Heap&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3 id=&quot;objc_objects_not_like_basic_types_block_do_change_the_retain_count&quot;&gt;Objc objects, not like basic types, Block do change the retain count.&lt;/h3&gt;
+
+&lt;p&gt;Code first&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;k&#39;&gt;@interface&lt;/span&gt; &lt;span class=&#39;nc&#39;&gt;MyClass&lt;/span&gt; : &lt;span class=&#39;nc&#39;&gt;NSObject&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_instanceObj&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@end&lt;/span&gt;
+
+&lt;span class=&#39;k&#39;&gt;@implementation&lt;/span&gt; &lt;span class=&#39;nc&#39;&gt;MyClass&lt;/span&gt;
+
+&lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;__globalObj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;nb&#39;&gt;nil&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;id&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;init&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;if&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;super&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;])&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;_instanceObj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;test&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;static&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;__staticObj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;nb&#39;&gt;nil&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;__globalObj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;__staticObj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+
+    &lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;localObj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;__block&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blockObj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSObject&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+
+    &lt;span class=&#39;k&#39;&gt;typedef&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;MyBlock&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;MyBlock&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;aBlock&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;__globalObj&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;__staticObj&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_instanceObj&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;localObj&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;blockObj&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;aBlock&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;aBlock&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;copy&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;aBlock&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;();&lt;/span&gt;
+
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%d&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;__globalObj&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retainCount&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]);&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%d&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;__staticObj&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retainCount&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]);&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%d&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;_instanceObj&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retainCount&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]);&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%d&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;localObj&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retainCount&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]);&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%d&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;blockObj&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retainCount&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]);&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+
+&lt;span class=&#39;k&#39;&gt;@end&lt;/span&gt;
+
+&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;main&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;argc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;kt&#39;&gt;char&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;argv&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;[])&lt;/span&gt; 
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;@&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;autoreleasepool&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;MyClass&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;obj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;MyClass&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+        &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;obj&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;test&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+        &lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;0&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The result is &lt;code&gt;1 1 1 2 1&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;__globalObj&lt;/code&gt; and &lt;code&gt;__staticObj&lt;/code&gt; have fixed memory location, therefore they won’t be retained when Block is copied.&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;_instanceObj&lt;/code&gt; is not retained directly when Block is copied. Instead, it retains self. As a result, we can read and write &lt;code&gt;_instanceObj&lt;/code&gt; in Block.&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;localObj&lt;/code&gt; is retained and the retainCount is increased by default when Block is copied.&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;blockObj&lt;/code&gt; is not retained when Block is copied.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;For those who are not ObjC objects, such as GCD dispatch_queue_t, are not retained when Block is copied. We should be careful of this case.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;retain_cycle&quot;&gt;Retain cycle&lt;/h3&gt;
+
+&lt;p&gt;The root of retain cycle is that Block and obj retain each other, as a consequence, nobody can be released. Taking the following code for example:&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;ASIHTTPRequest&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;request&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;ASIHTTPRequest&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;requestWithURL&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;url&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;request&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;setCompletionBlock&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:^&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;string&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;request&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;responseString&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}];&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;       &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+       &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;request&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;Block&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+  &lt;span class=&#39;o&#39;&gt;---&amp;gt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;--------&amp;gt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+       &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;2&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;&amp;lt;--------&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+       &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+       &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The solution is use weak reference to break retain cycle:&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;__block&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;ASIHTTPRequest&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;request&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;ASIHTTPRequest&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;requestWithURL&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;url&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;request&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;setCompletionBlock&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:^&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;string&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;request&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;responseString&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}];&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;      &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;request&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;Block&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+ &lt;span class=&#39;o&#39;&gt;----&amp;gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;--------&amp;gt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;weak&lt;/span&gt;    &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;When &lt;code&gt;request&lt;/code&gt; is released, the retainCount is 0. When request is dealloced, the Block will be released too.&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;      &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;request&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;Block&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+ &lt;span class=&#39;o&#39;&gt;--&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;X&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;-&amp;gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;----&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;X&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;---&amp;gt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;0&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;0&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;weak&lt;/span&gt;    &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The same trap as above:&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;myBlock&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;doSomething&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Here, self and myBlock retain each other. The solution is:&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;__block&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;MyClass&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;myBlock&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;doSomething&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;k&#39;&gt;@property&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;nonatomic&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;someVar&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+
+&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;myBlock&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_someVer&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Although we don’t retain self in the Block, we use the member variable &lt;code&gt;_someVer&lt;/code&gt;. Using member variables in Block, the block retains self rather than member variables. The solution is as before:&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;k&#39;&gt;@property&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;nonatomic&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;someVar&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+
+&lt;span class=&#39;n&#39;&gt;__block&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;MyClass&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;myBlock&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;someVer&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Not only retain cycle happens in two objects, it happens in many objects, which are more complicated.&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;ClassA&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;ClassA&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;myBlock&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;doSomething&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+  &lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;  &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;    &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt;    &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;Block&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;--------&amp;gt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;--------&amp;gt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+  &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+       &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;                                                &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+       &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;                                                &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+       &lt;span class=&#39;o&#39;&gt;+------------------------------------------------+&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The same as before, using &lt;code&gt;__block&lt;/code&gt; to break retain cycle&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;ClassA&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;ClassA&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+
+&lt;span class=&#39;n&#39;&gt;__block&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;MyClass&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;myBlock&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;doSomething&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;};&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;em&gt;NOTICE: In MRC &lt;code&gt;__block&lt;/code&gt; will not be retained while &lt;code&gt;__block&lt;/code&gt; is retained in ARC. In ARC, we should use &lt;code&gt;__weak&lt;/code&gt; or &lt;code&gt;__unsafe_unretained&lt;/code&gt; for weak reference. &lt;code&gt;__weak&lt;/code&gt; can only be used in iOS5 or later.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;objects_which_block_uses_are_released_in_advance&quot;&gt;Objects which Block uses are released in advance.&lt;/h3&gt;
+
+&lt;p&gt;Looking at the following example, Not only do &lt;code&gt;request&lt;/code&gt; holds Block, the other object also holds Block.&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;      &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;request&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;Block&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt;
+ &lt;span class=&#39;o&#39;&gt;----&amp;gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;--------&amp;gt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&amp;lt;--------&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;2&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;weak&lt;/span&gt;    &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;At the moment, if &lt;code&gt;request&lt;/code&gt; was released by its owner&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;      &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;request&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;Block&lt;/span&gt;   &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;objA&lt;/span&gt;
+ &lt;span class=&#39;o&#39;&gt;--&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;X&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;-&amp;gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;--------&amp;gt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&amp;lt;--------&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;0&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;retain&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;1&lt;/span&gt;  &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;   &lt;span class=&#39;n&#39;&gt;weak&lt;/span&gt;    &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;|&lt;/span&gt;
+      &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;           &lt;span class=&#39;o&#39;&gt;+-----------+&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The &lt;code&gt;request&lt;/code&gt; has been released, but the Block is still hold by the objA. If trigger the block now, it will crash the entire app since the block access the released request. To avoid this circumstance, developers should pay attention to the lifecycle of Block.&lt;/p&gt;
+
+&lt;p&gt;Another mistake which develoeprs usually make is using the &lt;code&gt;__block&lt;/code&gt; incorrectly. For instance&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;n&#39;&gt;__block&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;kkProducView&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;dispatch_async&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;dispatch_get_main_queue&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(),&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;.&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;xx&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;xx&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;When passing Block to a dispatch_async as a parameter, the system copys the block to Heap. If the Block reference instance variables, it will retain self too. Since the dispatch_async does not know when the self will be released, dispatch_async must retain self by itself to avoid self was released unespectedly. In this case, dispatch_async does not increase the retain count of self, before Block was executed, self maybe has been released, which may cause crash.&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;c1&#39;&gt;// MyClass.m&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;test&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;__block&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;MyClass&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+  &lt;span class=&#39;kt&#39;&gt;double&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;delayInSeconds&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mf&#39;&gt;10.0&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+  &lt;span class=&#39;kt&#39;&gt;dispatch_time_t&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;popTime&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;dispatch_time&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;DISPATCH_TIME_NOW&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int64_t&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;delayInSeconds&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;NSEC_PER_SEC&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;));&lt;/span&gt;
+  &lt;span class=&#39;n&#39;&gt;dispatch_after&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;popTime&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;dispatch_get_main_queue&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(),&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;^&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;){&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;%@&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;weakSelf&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;});&lt;/span&gt;
+
+&lt;span class=&#39;c1&#39;&gt;// other.m&lt;/span&gt;
+&lt;span class=&#39;n&#39;&gt;MyClass&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;*&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;obj&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[[[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;MyClass&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;alloc&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;]&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;autorelease&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;obj&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;test&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The &lt;code&gt;dispatch_after&lt;/code&gt; simulate an async task, executed 10 seconds later. The &lt;code&gt;obj&lt;/code&gt; has been released while the block is executing, which cause crash. The solution is removing the &lt;code&gt;__block&lt;/code&gt;.&lt;/p&gt;</content>
+ </entry>
+ 
+ <entry>
    <title>Objective C ivars' definition</title>
    <link href="http://xmkevin.github.io/foundations/2013/07/16/obj-c-variables-definition"/>
    <updated>2013-07-16T00:00:00+08:00</updated>
    <id>http://xmkevin.github.io/foundations/2013/07/16/obj-c-variables-definition</id>
    <content type="html">&lt;p&gt;When I first learned obj-c, I confused on how to declare an instance variable properly, because there are so many ways to do it. This article is trying to figure out the differences of defining an instance variable and find the right way to create an instance variable in the right place.&lt;/p&gt;
 
-&lt;h3 id='decalre_ivars_in_header'&gt;Decalre ivars in Header&lt;/h3&gt;
+&lt;h3 id=&quot;decalre_ivars_in_header&quot;&gt;Decalre ivars in Header&lt;/h3&gt;
 
-&lt;p&gt;Let&amp;#8217;s see the following code firstly, we define a Person class, which has name and age.&lt;/p&gt;
-&lt;div class='highlight'&gt;&lt;pre&gt;&lt;code class='objc'&gt;&lt;span class='cp'&gt;#import &amp;lt;Foundation/Foundation.h&amp;gt;&lt;/span&gt;
+&lt;p&gt;Let’s see the following code firstly, we define a Person class, which has name and age.&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;cp&#39;&gt;#import &amp;lt;Foundation/Foundation.h&amp;gt;&lt;/span&gt;
 
-&lt;span class='k'&gt;@interface&lt;/span&gt; &lt;span class='nc'&gt;Person&lt;/span&gt; : &lt;span class='nc'&gt;NSObject&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='kt'&gt;int&lt;/span&gt; &lt;span class='n'&gt;_age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='n'&gt;_name&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@interface&lt;/span&gt; &lt;span class=&#39;nc&#39;&gt;Person&lt;/span&gt; : &lt;span class=&#39;nc&#39;&gt;NSObject&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='o'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;id&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;initWithName&lt;/span&gt;&lt;span class='o'&gt;:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;name&lt;/span&gt; &lt;span class='n'&gt;andAge&lt;/span&gt;&lt;span class='o'&gt;:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;int&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
+&lt;span class=&#39;o&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;id&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;initWithName&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;name&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;andAge&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
 
-&lt;span class='k'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;void&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nf'&gt;introduceMyself&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nf&#39;&gt;introduceMyself&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
 
-&lt;span class='k'&gt;@end&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@end&lt;/span&gt;
 
-&lt;span class='c1'&gt;//Implementation&lt;/span&gt;
+&lt;span class=&#39;c1&#39;&gt;//Implementation&lt;/span&gt;
 
-&lt;span class='cp'&gt;#import &amp;quot;Person.h&amp;quot;&lt;/span&gt;
+&lt;span class=&#39;cp&#39;&gt;#import &amp;quot;Person.h&amp;quot;&lt;/span&gt;
 
-&lt;span class='k'&gt;@implementation&lt;/span&gt; &lt;span class='nc'&gt;Person&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@implementation&lt;/span&gt; &lt;span class=&#39;nc&#39;&gt;Person&lt;/span&gt;
 
-&lt;span class='k'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;id&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nf'&gt;initWithName:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nv'&gt;name&lt;/span&gt; &lt;span class='nf'&gt;andAge:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;int&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nv'&gt;age&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='n'&gt;self&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='p'&gt;[&lt;/span&gt;&lt;span class='n'&gt;super&lt;/span&gt; &lt;span class='n'&gt;init&lt;/span&gt;&lt;span class='p'&gt;];&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;id&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nf&#39;&gt;initWithName:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nv&#39;&gt;name&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;andAge:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nv&#39;&gt;age&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;super&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
     
-    &lt;span class='k'&gt;if&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='n'&gt;self&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;
-    &lt;span class='p'&gt;{&lt;/span&gt;
-        &lt;span class='n'&gt;_name&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='n'&gt;name&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-        &lt;span class='n'&gt;_age&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='n'&gt;age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='p'&gt;}&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;if&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
     
-    &lt;span class='k'&gt;return&lt;/span&gt; &lt;span class='n'&gt;self&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='k'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;void&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nf'&gt;introduceMyself&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='n'&gt;NSLog&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='s'&gt;@&amp;quot;My name is %@, I am %d&amp;quot;&lt;/span&gt;&lt;span class='p'&gt;,&lt;/span&gt; &lt;span class='n'&gt;_name&lt;/span&gt;&lt;span class='p'&gt;,&lt;/span&gt;&lt;span class='n'&gt;_age&lt;/span&gt;&lt;span class='p'&gt;);&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nf&#39;&gt;introduceMyself&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;My name is %@, I am %d&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='k'&gt;@end&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@end&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;It looks great, but what if I need some ivars which are not belonged to Person, just for computing or something else, should I declare them in header ?&lt;/p&gt;
-&lt;div class='highlight'&gt;&lt;pre&gt;&lt;code class='objc'&gt;&lt;span class='cp'&gt;#import &amp;lt;Foundation/Foundation.h&amp;gt;&lt;/span&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;cp&#39;&gt;#import &amp;lt;Foundation/Foundation.h&amp;gt;&lt;/span&gt;
 
-&lt;span class='k'&gt;@interface&lt;/span&gt; &lt;span class='nc'&gt;Person&lt;/span&gt; : &lt;span class='nc'&gt;NSObject&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='kt'&gt;int&lt;/span&gt; &lt;span class='n'&gt;_age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='n'&gt;_name&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@interface&lt;/span&gt; &lt;span class=&#39;nc&#39;&gt;Person&lt;/span&gt; : &lt;span class=&#39;nc&#39;&gt;NSObject&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
 
-    &lt;span class='kt'&gt;int&lt;/span&gt; &lt;span class='n'&gt;_introduceCount&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+    &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_introduceCount&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='o'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;id&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;initWithName&lt;/span&gt;&lt;span class='o'&gt;:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;name&lt;/span&gt; &lt;span class='n'&gt;andAge&lt;/span&gt;&lt;span class='o'&gt;:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;int&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
+&lt;span class=&#39;o&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;id&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;initWithName&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;name&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;andAge&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
 
-&lt;span class='k'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;void&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nf'&gt;introduceMyself&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nf&#39;&gt;introduceMyself&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
 
-&lt;span class='k'&gt;@end&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@end&lt;/span&gt;
 
-&lt;span class='c1'&gt;//Implementation&lt;/span&gt;
+&lt;span class=&#39;c1&#39;&gt;//Implementation&lt;/span&gt;
 
-&lt;span class='cp'&gt;#import &amp;quot;Person.h&amp;quot;&lt;/span&gt;
+&lt;span class=&#39;cp&#39;&gt;#import &amp;quot;Person.h&amp;quot;&lt;/span&gt;
 
-&lt;span class='k'&gt;@implementation&lt;/span&gt; &lt;span class='nc'&gt;Person&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@implementation&lt;/span&gt; &lt;span class=&#39;nc&#39;&gt;Person&lt;/span&gt;
 
-&lt;span class='k'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;id&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nf'&gt;initWithName:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nv'&gt;name&lt;/span&gt; &lt;span class='nf'&gt;andAge:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;int&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nv'&gt;age&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='n'&gt;self&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='p'&gt;[&lt;/span&gt;&lt;span class='n'&gt;super&lt;/span&gt; &lt;span class='n'&gt;init&lt;/span&gt;&lt;span class='p'&gt;];&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;id&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nf&#39;&gt;initWithName:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nv&#39;&gt;name&lt;/span&gt; &lt;span class=&#39;nf&#39;&gt;andAge:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nv&#39;&gt;age&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;super&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
     
-    &lt;span class='k'&gt;if&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='n'&gt;self&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;
-    &lt;span class='p'&gt;{&lt;/span&gt;
-        &lt;span class='n'&gt;_name&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='n'&gt;name&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-        &lt;span class='n'&gt;_age&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='n'&gt;age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-        &lt;span class='n'&gt;_introduceCount&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='mi'&gt;0&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='p'&gt;}&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;if&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;_introduceCount&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;mi&#39;&gt;0&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
     
-    &lt;span class='k'&gt;return&lt;/span&gt; &lt;span class='n'&gt;self&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='k'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;void&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='nf'&gt;introduceMyself&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='n'&gt;_introduceCount&lt;/span&gt;&lt;span class='o'&gt;++&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='n'&gt;NSLog&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='s'&gt;@&amp;quot;My name is %@, I am %d. I have introduced myself %d times.&amp;quot;&lt;/span&gt;&lt;span class='p'&gt;,&lt;/span&gt; &lt;span class='n'&gt;_name&lt;/span&gt;&lt;span class='p'&gt;,&lt;/span&gt;&lt;span class='n'&gt;_age&lt;/span&gt;&lt;span class='p'&gt;,&lt;/span&gt; &lt;span class='n'&gt;_introduceCount&lt;/span&gt;&lt;span class='p'&gt;);&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;nf&#39;&gt;introduceMyself&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;_introduceCount&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;++&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;My name is %@, I am %d. I have introduced myself %d times.&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_introduceCount&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='k'&gt;@end&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@end&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;p&gt;If I want to use the Person class, what I care is the introduceMyself method, I don&amp;#8217;t care what ivars it defines. Therefore, it seems it is not a good idea to define ivars in header file. The header file is the interface for the class, everyone who wants to invoke the class does not care about what non-public ivars it has. Yes, there are some other ways to define ivars.&lt;/p&gt;
+&lt;p&gt;If I want to use the Person class, what I care is the introduceMyself method, I don’t care what ivars it defines. Therefore, it seems it is not a good idea to define ivars in header file. The header file is the interface for the class, everyone who wants to invoke the class does not care about what non-public ivars it has. Yes, there are some other ways to define ivars.&lt;/p&gt;
 
-&lt;h3 id='declare_ivars_in_extension'&gt;Declare ivars in Extension&lt;/h3&gt;
+&lt;h3 id=&quot;declare_ivars_in_extension&quot;&gt;Declare ivars in Extension&lt;/h3&gt;
 
-&lt;p&gt;Let&amp;#8217;s take a look at the following code too.&lt;/p&gt;
-&lt;div class='highlight'&gt;&lt;pre&gt;&lt;code class='objc'&gt;&lt;span class='c1'&gt;//Extension&lt;/span&gt;
-&lt;span class='k'&gt;@interface&lt;/span&gt; &lt;span class='nc'&gt;Person&lt;/span&gt;&lt;span class='p'&gt;()&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='n'&gt;_name&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='kt'&gt;int&lt;/span&gt; &lt;span class='n'&gt;_age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='kt'&gt;int&lt;/span&gt; &lt;span class='n'&gt;_introduceCount&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+&lt;p&gt;Let’s take a look at the following code too.&lt;/p&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;c1&#39;&gt;//Extension&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@interface&lt;/span&gt; &lt;span class=&#39;nc&#39;&gt;Person&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;()&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_introduceCount&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='k'&gt;@end&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@end&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;We define ivars in Extension. The ivars in Extension are private. Now the header file is cleaner. Extension is used to declare private ivars, properties and methods. Here is another question: why should we use Extension, can we define them in Implementation directly? The answer is yes.&lt;/p&gt;
 
-&lt;h3 id='declare_ivars_in_implementation'&gt;Declare ivars in Implementation&lt;/h3&gt;
+&lt;h3 id=&quot;declare_ivars_in_implementation&quot;&gt;Declare ivars in Implementation&lt;/h3&gt;
 
 &lt;p&gt;Declaring iVars inside the implementation is definately a new construct in objective C. You need to be using xcode4.2 and have the LLVM compiler selected in your build settings. The idea is to keep your header files cleaner(from stackoverflow). So now, we can declare ivars in Implementation drectly like this:&lt;/p&gt;
-&lt;div class='highlight'&gt;&lt;pre&gt;&lt;code class='objc'&gt;&lt;span class='c1'&gt;//Implementation&lt;/span&gt;
-&lt;span class='k'&gt;@implementation&lt;/span&gt; &lt;span class='nc'&gt;Person&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='kt'&gt;int&lt;/span&gt; &lt;span class='n'&gt;_age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='n'&gt;_name&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+&lt;div class=&#39;highlight&#39;&gt;&lt;pre&gt;&lt;code class=&#39;objc&#39;&gt;&lt;span class=&#39;c1&#39;&gt;//Implementation&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@implementation&lt;/span&gt; &lt;span class=&#39;nc&#39;&gt;Person&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='o'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;id&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;initWithName&lt;/span&gt;&lt;span class='o'&gt;:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='n'&gt;NSString&lt;/span&gt; &lt;span class='o'&gt;*&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;name&lt;/span&gt; &lt;span class='n'&gt;andAge&lt;/span&gt;&lt;span class='o'&gt;:&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;int&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;age&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='n'&gt;self&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='p'&gt;[&lt;/span&gt;&lt;span class='n'&gt;super&lt;/span&gt; &lt;span class='n'&gt;init&lt;/span&gt;&lt;span class='p'&gt;];&lt;/span&gt;
+&lt;span class=&#39;o&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;id&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;initWithName&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;NSString&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;*&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;name&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;andAge&lt;/span&gt;&lt;span class=&#39;o&#39;&gt;:&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;int&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;age&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;p&#39;&gt;[&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;super&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;init&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;];&lt;/span&gt;
     
-    &lt;span class='k'&gt;if&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt; &lt;span class='n'&gt;self&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;
-    &lt;span class='p'&gt;{&lt;/span&gt;
-        &lt;span class='n'&gt;_name&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='n'&gt;name&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-        &lt;span class='n'&gt;_age&lt;/span&gt; &lt;span class='o'&gt;=&lt;/span&gt; &lt;span class='n'&gt;age&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-    &lt;span class='p'&gt;}&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;if&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+        &lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt; &lt;span class=&#39;o&#39;&gt;=&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+    &lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
     
-    &lt;span class='k'&gt;return&lt;/span&gt; &lt;span class='n'&gt;self&lt;/span&gt;&lt;span class='p'&gt;;&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+    &lt;span class=&#39;k&#39;&gt;return&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;self&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;;&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='o'&gt;-&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='kt'&gt;void&lt;/span&gt;&lt;span class='p'&gt;)&lt;/span&gt;&lt;span class='n'&gt;introduceMyself&lt;/span&gt;
-&lt;span class='p'&gt;{&lt;/span&gt;
-    &lt;span class='n'&gt;NSLog&lt;/span&gt;&lt;span class='p'&gt;(&lt;/span&gt;&lt;span class='s'&gt;@&amp;quot;My name is %@, I am %d&amp;quot;&lt;/span&gt;&lt;span class='p'&gt;,&lt;/span&gt; &lt;span class='n'&gt;_name&lt;/span&gt;&lt;span class='p'&gt;,&lt;/span&gt;&lt;span class='n'&gt;_age&lt;/span&gt;&lt;span class='p'&gt;);&lt;/span&gt;
-&lt;span class='p'&gt;}&lt;/span&gt;
+&lt;span class=&#39;o&#39;&gt;-&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;kt&#39;&gt;void&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;)&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;introduceMyself&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;{&lt;/span&gt;
+    &lt;span class=&#39;n&#39;&gt;NSLog&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;(&lt;/span&gt;&lt;span class=&#39;s&#39;&gt;@&amp;quot;My name is %@, I am %d&amp;quot;&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt; &lt;span class=&#39;n&#39;&gt;_name&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;,&lt;/span&gt;&lt;span class=&#39;n&#39;&gt;_age&lt;/span&gt;&lt;span class=&#39;p&#39;&gt;);&lt;/span&gt;
+&lt;span class=&#39;p&#39;&gt;}&lt;/span&gt;
 
-&lt;span class='k'&gt;@end&lt;/span&gt;
+&lt;span class=&#39;k&#39;&gt;@end&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;h3 id='conclution'&gt;Conclution&lt;/h3&gt;
+&lt;h3 id=&quot;conclution&quot;&gt;Conclution&lt;/h3&gt;
 
 &lt;p&gt;Although we can define ivars in Header, Extension and Implementation. To make the header cleaner, we should only declare public and protected ivars in header. If you are using xcode4.2 or above and select the LLVM compiler, you can declare private ivars and methods inside Implementation directly.&lt;/p&gt;</content>
  </entry>

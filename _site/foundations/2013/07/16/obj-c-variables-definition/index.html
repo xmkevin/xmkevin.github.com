@@ -53,9 +53,9 @@
 				<div class="entry-content">
 					<p>When I first learned obj-c, I confused on how to declare an instance variable properly, because there are so many ways to do it. This article is trying to figure out the differences of defining an instance variable and find the right way to create an instance variable in the right place.</p>
 
-<h3 id='decalre_ivars_in_header'>Decalre ivars in Header</h3>
+<h3 id="decalre_ivars_in_header">Decalre ivars in Header</h3>
 
-<p>Let&#8217;s see the following code firstly, we define a Person class, which has name and age.</p>
+<p>Let’s see the following code firstly, we define a Person class, which has name and age.</p>
 <div class='highlight'><pre><code class='objc'><span class='cp'>#import &lt;Foundation/Foundation.h&gt;</span>
 
 <span class='k'>@interface</span> <span class='nc'>Person</span> : <span class='nc'>NSObject</span>
@@ -141,11 +141,11 @@
 
 <span class='k'>@end</span>
 </code></pre></div>
-<p>If I want to use the Person class, what I care is the introduceMyself method, I don&#8217;t care what ivars it defines. Therefore, it seems it is not a good idea to define ivars in header file. The header file is the interface for the class, everyone who wants to invoke the class does not care about what non-public ivars it has. Yes, there are some other ways to define ivars.</p>
+<p>If I want to use the Person class, what I care is the introduceMyself method, I don’t care what ivars it defines. Therefore, it seems it is not a good idea to define ivars in header file. The header file is the interface for the class, everyone who wants to invoke the class does not care about what non-public ivars it has. Yes, there are some other ways to define ivars.</p>
 
-<h3 id='declare_ivars_in_extension'>Declare ivars in Extension</h3>
+<h3 id="declare_ivars_in_extension">Declare ivars in Extension</h3>
 
-<p>Let&#8217;s take a look at the following code too.</p>
+<p>Let’s take a look at the following code too.</p>
 <div class='highlight'><pre><code class='objc'><span class='c1'>//Extension</span>
 <span class='k'>@interface</span> <span class='nc'>Person</span><span class='p'>()</span>
 <span class='p'>{</span>
@@ -158,7 +158,7 @@
 </code></pre></div>
 <p>We define ivars in Extension. The ivars in Extension are private. Now the header file is cleaner. Extension is used to declare private ivars, properties and methods. Here is another question: why should we use Extension, can we define them in Implementation directly? The answer is yes.</p>
 
-<h3 id='declare_ivars_in_implementation'>Declare ivars in Implementation</h3>
+<h3 id="declare_ivars_in_implementation">Declare ivars in Implementation</h3>
 
 <p>Declaring iVars inside the implementation is definately a new construct in objective C. You need to be using xcode4.2 and have the LLVM compiler selected in your build settings. The idea is to keep your header files cleaner(from stackoverflow). So now, we can declare ivars in Implementation drectly like this:</p>
 <div class='highlight'><pre><code class='objc'><span class='c1'>//Implementation</span>
@@ -188,7 +188,7 @@
 
 <span class='k'>@end</span>
 </code></pre></div>
-<h3 id='conclution'>Conclution</h3>
+<h3 id="conclution">Conclution</h3>
 
 <p>Although we can define ivars in Header, Extension and Implementation. To make the header cleaner, we should only declare public and protected ivars in header. If you are using xcode4.2 or above and select the LLVM compiler, you can declare private ivars and methods inside Implementation directly.</p>
 					<div class="meta">
@@ -209,7 +209,7 @@
   
      
     	<li><a href="/categories.html#foundations-ref">
-    		foundations <span>1</span>
+    		foundations <span>2</span>
     	</a></li>
     
   
@@ -224,7 +224,7 @@
 
   
      
-    	<li><a href="/tags.html#objc-ref">objc <span>1</span></a></li>
+    	<li><a href="/tags.html#objc-ref">objc <span>2</span></a></li>
     
   
 
@@ -271,6 +271,8 @@
 						<ul>
 							
 							
+							
+							<li class="next"><a class="internal" rel="next"  href="/foundations/2014/01/19/how-to-use-blocks-with-gcd-correctly-to-avoid-retain-cycle" title="View How to use Blocks with GCD correctly to avoid retain cycle">How to use Blocks with GCD correctly to avoid retain cycle &raquo;</a></li>
 							
 						</ul>
 					</nav>

@@ -1,0 +1,567 @@
+
+<!DOCTYPE html>
+<!--[if lt IE 7]> <html class="no-js lt-ie9 lt-ie8 lt-ie7 ie" lang="en"> <![endif]-->
+<!--[if IE 7]>    <html class="no-js lt-ie9 lt-ie8 ie" lang="en"> <![endif]-->
+<!--[if IE 8]>    <html class="no-js lt-ie9 ie" lang="en"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en"> <!--<![endif]-->
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>How to use Blocks with GCD correctly to avoid retain cycle</title>
+	<meta name="author" content="Kevin Gao">
+	<link href='/assets/themes/the-minimum/css/style.css' rel="stylesheet" media="all">
+	<link href="http://feeds.feedburner.com/" rel="alternate" title="How to use Blocks with GCD correctly to avoid retain cycle" type="application/atom+xml">
+	<script src="http://cdnjs.cloudflare.com/ajax/libs/modernizr/2.0.6/modernizr.min.js"></script>
+</head>
+<body>
+
+<div id="page" class="hentry">
+	<header class="the-header">
+		<div class="unit-head">
+			<div class="unit-inner unit-head-inner">
+				<p class="logo"><a href="/">Xmkevin's Blog</a></p>
+				<nav class="nav-global">
+					<ul>
+						<li class="archive"><a href="/archive.html">archive</a></li>
+						<li class="page"><a href="/pages.html">pages</a></li>
+						<li class="category"><a href="/categories.html">categories</a></li>
+						<li class="tag"><a href="/tags.html">tags</a></li>
+						<li class="forkme"><iframe src="http://markdotto.github.com/github-buttons/github-btn.html?user=plusjade&repo=jekyll-bootstrap&type=fork&count=true"
+								allowtransparency="true" frameborder="0" scrolling="0" width="95px" height="20px"></iframe></li>
+					</ul>
+				</nav>
+			</div><!-- unit-inner -->
+		</div><!-- unit-head -->
+	</header>
+	<div class="body" role="main">
+		<div class="unit-body">
+			<div class="unit-inner unit-body-inner">
+				<div class="entry-content">
+					
+<article class="unit-article layout-post">
+	<div class="unit-inner unit-article-inner">
+		<div class="content">
+			<header>
+				<div class="unit-head">
+					<div class="unit-inner unit-head-inner">
+						<h1 class="h2 entry-title">How to use Blocks with GCD correctly to avoid retain cycle</h1>
+					</div><!-- unit-inner -->
+				</div><!-- unit-head -->
+			</header>
+
+			<div class="bd">
+				<div class="entry-content">
+					<p>This is an translation article from <a href="http://tanqisen.github.io/blog/2013/04/19/gcd-block-cycle-retain/">Chinese</a>. I am trying my best to translate it, but because of my English limitation, it maybe not be translated exactly, if you have any question, please leave a comment.</p>
+
+<h2 id="intro_of_block">Intro of Block</h2>
+
+<p>As an extension of C, Block is not a new technology, while it is the same technology as closure and lambda expression of other languages. We should notice that there is not a GC for Objective-C in iOS, we should manage the memory by ourselves, and memory management for block is the point where we usually make mistakes. Error memory management could cause retain cycle or crash. Block is like function pointer, but the most difference of Block and function pointer is : Block can access external variables which are not in the function scope. In other words, Block is a function with execution context.</p>
+
+<p>You can think that Block contains two compoments</p>
+
+<ol>
+<li>The code that Block executes, which is generated when being compiled.</li>
+
+<li>A data structure contains the external variables that the Block needs when execution.</li>
+</ol>
+
+<p>Another difference of Block and Function pointer is that Block can be managed by <code>autoreleasepool</code> like Objective C object (But Block is not equal to Obj-C object, we will explain it later).</p>
+
+<h2 id="basic_syntax_of_block">Basic syntax of Block</h2>
+<div class='highlight'><pre><code class='objc'><span class='c1'>// declare a Block variable</span>
+<span class='kt'>long</span> <span class='p'>(</span><span class='o'>^</span><span class='n'>sum</span><span class='p'>)</span> <span class='p'>(</span><span class='kt'>int</span><span class='p'>,</span> <span class='kt'>int</span><span class='p'>)</span> <span class='o'>=</span> <span class='nb'>nil</span><span class='p'>;</span>
+<span class='c1'>// sum is a Block variable, the Block type has two int parameters and a long return type.</span>
+
+<span class='c1'>// Define a Block and assign it to sum</span>
+<span class='n'>sum</span> <span class='o'>=</span> <span class='o'>^</span> <span class='kt'>long</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span>
+<span class='p'>{</span>
+	<span class='k'>return</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+<span class='p'>};</span>
+<span class='c1'>// Invoke the Block</span>
+<span class='kt'>long</span> <span class='n'>s</span> <span class='o'>=</span> <span class='n'>sum</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>,</span><span class='mi'>2</span><span class='p'>);</span>
+</code></pre></div>
+<p>Define a function which returns a block:</p>
+<div class='highlight'><pre><code class='objc'><span class='k'>-</span> <span class='p'>(</span><span class='kt'>long</span> <span class='p'>(</span><span class='o'>^</span><span class='p'>)(</span><span class='kt'>int</span><span class='p'>,</span><span class='kt'>int</span><span class='p'>))</span> <span class='nf'>sumBlock</span>
+<span class='p'>{</span>
+	<span class='kt'>int</span> <span class='n'>base</span><span class='o'>=</span><span class='mi'>100</span><span class='p'>;</span>
+	<span class='k'>return</span> <span class='p'>[[</span><span class='o'>^</span><span class='kt'>long</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span>
+	<span class='p'>{</span>
+		<span class='k'>return</span> <span class='n'>base</span> <span class='o'>+</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+
+	<span class='p'>}</span> <span class='n'>copy</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+<span class='p'>}</span>
+</code></pre></div>
+<p>Looks strange? For looking comfortable, we can typedef the Block</p>
+<div class='highlight'><pre><code class='objc'><span class='k'>typedef</span> <span class='nf'>long</span> <span class='p'>(</span><span class='o'>^</span><span class='n'>BlkSum</span><span class='p'>)(</span><span class='kt'>int</span><span class='p'>,</span><span class='kt'>int</span><span class='p'>);</span>
+
+<span class='k'>-</span><span class='p'>(</span><span class='n'>BlkSum</span><span class='p'>)</span> <span class='nf'>sumBlock</span>
+<span class='p'>{</span>
+	<span class='kt'>int</span> <span class='n'>base</span> <span class='o'>=</span> <span class='mi'>100</span><span class='p'>;</span>
+	<span class='n'>BlkSum</span> <span class='n'>blk</span> <span class='o'>=</span> <span class='o'>^</span> <span class='kt'>long</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span>
+	<span class='p'>{</span>
+		<span class='k'>return</span> <span class='n'>base</span> <span class='o'>+</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+	<span class='p'>}</span>
+	<span class='k'>return</span> <span class='p'>[[</span><span class='n'>blk</span> <span class='n'>copy</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+<span class='p'>}</span>
+</code></pre></div>
+<h2 id="memory_locations_of_block">Memory locations of Block</h2>
+
+<p>There are 3 types of Block according to the Block’s position in memory, which are NSGlobakBlock, NSStackBlock and NSMallocBlock.</p>
+
+<ul>
+<li>NSGlobakBlock : like function, in text area;</li>
+
+<li>NSStackBlock : In Stack memory, would be released when function returned;</li>
+
+<li>NSMallocBlock : In Heap memory;</li>
+</ul>
+<div class='highlight'><pre><code class='objc'><span class='n'>BlkSum</span> <span class='n'>blk1</span> <span class='o'>=</span> <span class='o'>^</span><span class='kt'>long</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span><span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span>
+<span class='p'>{</span>
+	<span class='k'>return</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+<span class='p'>};</span>
+<span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;blk1 = %@&quot;</span><span class='p'>,</span> <span class='n'>blk1</span><span class='p'>);</span> <span class='c1'>// blk1 = &lt;__NSGlobalBlock__: 0x47d0&gt;</span>
+
+<span class='kt'>int</span> <span class='n'>base</span> <span class='o'>=</span> <span class='mi'>100</span><span class='p'>;</span>
+<span class='n'>BlkSum</span> <span class='n'>blk2</span> <span class='o'>=</span> <span class='o'>^</span><span class='kt'>long</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span>
+<span class='p'>{</span>
+	<span class='k'>return</span> <span class='n'>base</span> <span class='o'>+</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+<span class='p'>};</span>
+<span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;blk2 = %@&quot;</span><span class='p'>,</span> <span class='n'>blk2</span><span class='p'>);</span> <span class='c1'>// blk2 = &lt;__NSStackBlock__: 0xbfffddf8&gt;</span>
+
+<span class='n'>BlkSum</span> <span class='n'>blk3</span> <span class='o'>=</span> <span class='p'>[[</span><span class='n'>blk2</span> <span class='n'>copy</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+<span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;blk3 = %@&quot;</span><span class='p'>,</span> <span class='n'>blk3</span><span class='p'>);</span> <span class='c1'>// blk3 = &lt;__NSMallocBlock__: 0x902fda0&gt;</span>
+</code></pre></div>
+<p>Why the type of blk1 is NSGlobalBlock but the type of blk2 is NSStackBlock? The difference between blk1 and blk2 is that blk1 doesn’t use any variable outside of the Block, therefore, it does not need to capture local variables, which make it the same as Function. I guess that the compiler put blk1 in the text area by the memory address 0x47d0. The only difference between blk2 and blk1 is blk2 uses the local variable base, while <em>defining</em> (not executing ) blk2, base was copied to the stack to be used by the Block. Executing the following code, the result is 203 rather than 204.</p>
+<div class='highlight'><pre><code class='objc'><span class='kt'>int</span> <span class='n'>base</span> <span class='o'>=</span> <span class='mi'>100</span><span class='p'>;</span>
+<span class='n'>base</span> <span class='o'>+=</span> <span class='mi'>100</span><span class='p'>;</span>
+<span class='n'>BlkSum</span> <span class='n'>sum</span> <span class='o'>=</span> <span class='o'>^</span> <span class='kt'>long</span> <span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span> <span class='p'>{</span>
+<span class='k'>return</span> <span class='n'>base</span> <span class='o'>+</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+<span class='p'>};</span>
+<span class='n'>base</span><span class='o'>++</span><span class='p'>;</span>
+<span class='n'>printf</span><span class='p'>(</span><span class='s'>&quot;%ld&quot;</span><span class='p'>,</span><span class='n'>sum</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>,</span><span class='mi'>2</span><span class='p'>));</span>
+</code></pre></div>
+<p>In the Block, base is readonly, if we want to change the value of base, we should define it by appending <code>__block</code> attribute : <code>__block int base = 100</code>;</p>
+<div class='highlight'><pre><code class='objc'><span class='n'>__block</span> <span class='kt'>int</span> <span class='n'>base</span> <span class='o'>=</span> <span class='mi'>100</span><span class='p'>;</span>
+<span class='n'>base</span> <span class='o'>+=</span> <span class='mi'>100</span><span class='p'>;</span>
+<span class='n'>BlkSum</span> <span class='n'>sum</span> <span class='o'>=</span> <span class='o'>^</span> <span class='kt'>long</span> <span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span> <span class='p'>{</span>
+<span class='n'>base</span> <span class='o'>+=</span> <span class='mi'>10</span><span class='p'>;</span>
+<span class='k'>return</span> <span class='n'>base</span> <span class='o'>+</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+<span class='p'>};</span>
+<span class='n'>base</span><span class='o'>++</span><span class='p'>;</span>
+<span class='n'>printf</span><span class='p'>(</span><span class='s'>&quot;%ld</span><span class='se'>\n</span><span class='s'>&quot;</span><span class='p'>,</span><span class='n'>sum</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>,</span><span class='mi'>2</span><span class='p'>));</span>
+<span class='n'>printf</span><span class='p'>(</span><span class='s'>&quot;%d</span><span class='se'>\n</span><span class='s'>&quot;</span><span class='p'>,</span><span class='n'>base</span><span class='p'>);</span>
+</code></pre></div>
+<p>The console will print 214, 211. When using <code>__block</code> to declare a variable, the runtime value will be used instead of definition value. On the above example, when runing <code>sum(1,2)</code>, base will get the value of base++, which is 201, and then execute Block <code>base+=10; base+a+b;</code>, the result is 214. When Block execution finished, base has become 211.</p>
+
+<h2 id="copy_retain_release_a_block">Copy, retain, release a Block</h2>
+
+<p>Differences to NSObject’s copy, retain and release:</p>
+
+<ul>
+<li>Block_copy equals to copy and Block_release equals to release;</li>
+
+<li>Retain, copy and release a Block won’t change the retainCount, the retainCount remains 1;</li>
+
+<li>NSGlobalBlock: retain,copy and release are invalid;</li>
+
+<li>NSStackBlock: retain and release operation are invalid. We should notice that the Block memory will be recycled when the NSStackBlock returns even it has been retained. A common mistake is <code>[mutableArray addObject:stackBlock]</code>, when the function is poped out of the stack, the stackBlock is recycled. The correct way is copy the block to the Heap firstly: <code>[mutableArray addObject:[[stackBlock copy] autorelease]</code>. Copy the block to generate a new NSMallocBlock object.</li>
+
+<li>NSMallocBlock: supports retain and release. Although the retainCount remains 1, but the memory management will increase and reduce the count. Copying a NSMallocBlock won’t create a new instance, but it increase a reference count, like retain;</li>
+
+<li>Avoid retain a Block.</li>
+</ul>
+
+<h2 id="different_types_of_variable_in_block">Different types of variable in Block</h2>
+
+<h3 id="basic_types">Basic types</h3>
+
+<ul>
+<li>Local variables are readonly in Block. Block copys the variable value in definition, therefore, even the variable value has been changed outside of the Block, the variable value in the Block would stay the same.</li>
+</ul>
+<div class='highlight'><pre><code class='objc'><span class='kt'>int</span> <span class='n'>base</span> <span class='o'>=</span> <span class='mi'>100</span><span class='p'>;</span>
+<span class='n'>BlkSum</span> <span class='n'>sum</span> <span class='o'>=</span> <span class='o'>^</span> <span class='kt'>long</span> <span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span> <span class='p'>{</span>
+  <span class='c1'>// base++; compile error, readonly</span>
+  <span class='k'>return</span> <span class='n'>base</span> <span class='o'>+</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+<span class='p'>};</span>
+<span class='n'>base</span> <span class='o'>=</span> <span class='mi'>0</span><span class='p'>;</span>
+<span class='n'>printf</span><span class='p'>(</span><span class='s'>&quot;%ld</span><span class='se'>\n</span><span class='s'>&quot;</span><span class='p'>,</span><span class='n'>sum</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>,</span><span class='mi'>2</span><span class='p'>));</span> <span class='c1'>// The output is 103 rather than 3</span>
+</code></pre></div>
+<ul>
+<li>+static+ variables and global variables. If we change the base variable to static or global on above example, it can be readed and written in Block. Because global and static variables have fixed memory locations, Block reads the new value from memory directly, but not copied constant value in definition.</li>
+</ul>
+<div class='highlight'><pre><code class='objc'><span class='k'>static</span> <span class='kt'>int</span> <span class='n'>base</span> <span class='o'>=</span> <span class='mi'>100</span><span class='p'>;</span>
+<span class='n'>BlkSum</span> <span class='n'>sum</span> <span class='o'>=</span> <span class='o'>^</span> <span class='kt'>long</span> <span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span> <span class='p'>{</span>
+  <span class='n'>base</span><span class='o'>++</span><span class='p'>;</span>
+  <span class='k'>return</span> <span class='n'>base</span> <span class='o'>+</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+<span class='p'>};</span>
+<span class='n'>base</span> <span class='o'>=</span> <span class='mi'>0</span><span class='p'>;</span>
+<span class='n'>printf</span><span class='p'>(</span><span class='s'>&quot;%d</span><span class='se'>\n</span><span class='s'>&quot;</span><span class='p'>,</span> <span class='n'>base</span><span class='p'>);</span>
+<span class='n'>printf</span><span class='p'>(</span><span class='s'>&quot;%ld</span><span class='se'>\n</span><span class='s'>&quot;</span><span class='p'>,</span><span class='n'>sum</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>,</span><span class='mi'>2</span><span class='p'>));</span> <span class='c1'>// The output is 4 instead of 104</span>
+<span class='n'>printf</span><span class='p'>(</span><span class='s'>&quot;%d</span><span class='se'>\n</span><span class='s'>&quot;</span><span class='p'>,</span> <span class='n'>base</span><span class='p'>);</span>
+</code></pre></div>
+<p>The outputs are <code>0 4 1</code>, which indicates changing base outside of Block affects the value in the Block and vice versa.</p>
+
+<ul>
+<li>Block variable, variables with <code>__block</code> are called Block variables. Basic types of Block variables are equal to static and global variables.</li>
+</ul>
+
+<h3 id="assuming_block1_is_used_by_block2_when_block2_is_copied_to_heap_block1_is_copied_too_but_if_block1_is_a_parameter_it_wont_be_copied">Assuming block1 is used by block2, when block2 is copied to Heap, block1 is copied too. But if block1 is a parameter, it won’t be copied.</h3>
+<div class='highlight'><pre><code class='objc'><span class='kt'>void</span> <span class='nf'>foo</span><span class='p'>()</span> <span class='p'>{</span>
+  <span class='kt'>int</span> <span class='n'>base</span> <span class='o'>=</span> <span class='mi'>100</span><span class='p'>;</span>
+  <span class='n'>BlkSum</span> <span class='n'>blk</span> <span class='o'>=</span> <span class='o'>^</span> <span class='kt'>long</span> <span class='p'>(</span><span class='kt'>int</span> <span class='n'>a</span><span class='p'>,</span> <span class='kt'>int</span> <span class='n'>b</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='k'>return</span>  <span class='n'>base</span> <span class='o'>+</span> <span class='n'>a</span> <span class='o'>+</span> <span class='n'>b</span><span class='p'>;</span>
+  <span class='p'>};</span>
+  <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>blk</span><span class='p'>);</span> <span class='c1'>// &lt;__NSStackBlock__: 0xbfffdb40&gt;</span>
+  <span class='n'>bar</span><span class='p'>(</span><span class='n'>blk</span><span class='p'>);</span>
+<span class='p'>}</span>
+
+<span class='kt'>void</span> <span class='nf'>bar</span><span class='p'>(</span><span class='n'>BlkSum</span> <span class='n'>sum_blk</span><span class='p'>)</span> <span class='p'>{</span>
+  <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span><span class='n'>sum_blk</span><span class='p'>);</span> <span class='c1'>// The same as above, won&#39;t copied as a parameter</span>
+
+  <span class='kt'>void</span> <span class='p'>(</span><span class='o'>^</span><span class='n'>blk</span><span class='p'>)</span> <span class='p'>(</span><span class='n'>BlkSum</span><span class='p'>)</span> <span class='o'>=</span> <span class='o'>^</span> <span class='p'>(</span><span class='n'>BlkSum</span> <span class='n'>sum</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span><span class='n'>sum</span><span class='p'>);</span>     <span class='c1'>// No matter blk is in Stack or Heap, Block wount&#39; be copied as a parameter</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span><span class='n'>sum_blk</span><span class='p'>);</span> <span class='c1'>// When blk is copied to the Heap, sum_blk is copied too.</span>
+  <span class='p'>};</span>
+  <span class='n'>blk</span><span class='p'>(</span><span class='n'>sum_blk</span><span class='p'>);</span> <span class='c1'>// blk is on Stack</span>
+
+  <span class='n'>blk</span> <span class='o'>=</span> <span class='p'>[[</span><span class='n'>blk</span> <span class='n'>copy</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+  <span class='n'>blk</span><span class='p'>(</span><span class='n'>sum_blk</span><span class='p'>);</span> <span class='c1'>// blk is on Heap</span>
+<span class='p'>}</span>
+</code></pre></div>
+<h3 id="objc_objects_not_like_basic_types_block_do_change_the_retain_count">Objc objects, not like basic types, Block do change the retain count.</h3>
+
+<p>Code first</p>
+<div class='highlight'><pre><code class='objc'><span class='k'>@interface</span> <span class='nc'>MyClass</span> : <span class='nc'>NSObject</span> <span class='p'>{</span>
+    <span class='n'>NSObject</span><span class='o'>*</span> <span class='n'>_instanceObj</span><span class='p'>;</span>
+<span class='p'>}</span>
+<span class='k'>@end</span>
+
+<span class='k'>@implementation</span> <span class='nc'>MyClass</span>
+
+<span class='n'>NSObject</span><span class='o'>*</span> <span class='n'>__globalObj</span> <span class='o'>=</span> <span class='nb'>nil</span><span class='p'>;</span>
+
+<span class='k'>-</span> <span class='p'>(</span><span class='kt'>id</span><span class='p'>)</span> <span class='nf'>init</span> <span class='p'>{</span>
+    <span class='k'>if</span> <span class='p'>(</span><span class='n'>self</span> <span class='o'>=</span> <span class='p'>[</span><span class='n'>super</span> <span class='n'>init</span><span class='p'>])</span> <span class='p'>{</span>
+        <span class='n'>_instanceObj</span> <span class='o'>=</span> <span class='p'>[[</span><span class='n'>NSObject</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>];</span>
+    <span class='p'>}</span>
+    <span class='k'>return</span> <span class='n'>self</span><span class='p'>;</span>
+<span class='p'>}</span>
+
+<span class='k'>-</span> <span class='p'>(</span><span class='kt'>void</span><span class='p'>)</span> <span class='nf'>test</span> <span class='p'>{</span>
+    <span class='k'>static</span> <span class='n'>NSObject</span><span class='o'>*</span> <span class='n'>__staticObj</span> <span class='o'>=</span> <span class='nb'>nil</span><span class='p'>;</span>
+    <span class='n'>__globalObj</span> <span class='o'>=</span> <span class='p'>[[</span><span class='n'>NSObject</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>];</span>
+    <span class='n'>__staticObj</span> <span class='o'>=</span> <span class='p'>[[</span><span class='n'>NSObject</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>];</span>
+
+    <span class='n'>NSObject</span><span class='o'>*</span> <span class='n'>localObj</span> <span class='o'>=</span> <span class='p'>[[</span><span class='n'>NSObject</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>];</span>
+    <span class='n'>__block</span> <span class='n'>NSObject</span><span class='o'>*</span> <span class='n'>blockObj</span> <span class='o'>=</span> <span class='p'>[[</span><span class='n'>NSObject</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>];</span>
+
+    <span class='k'>typedef</span> <span class='kt'>void</span> <span class='p'>(</span><span class='o'>^</span><span class='n'>MyBlock</span><span class='p'>)(</span><span class='kt'>void</span><span class='p'>)</span> <span class='p'>;</span>
+    <span class='n'>MyBlock</span> <span class='n'>aBlock</span> <span class='o'>=</span> <span class='o'>^</span><span class='p'>{</span>
+        <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>__globalObj</span><span class='p'>);</span>
+        <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>__staticObj</span><span class='p'>);</span>
+        <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>_instanceObj</span><span class='p'>);</span>
+        <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>localObj</span><span class='p'>);</span>
+        <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>blockObj</span><span class='p'>);</span>
+    <span class='p'>};</span>
+    <span class='n'>aBlock</span> <span class='o'>=</span> <span class='p'>[[</span><span class='n'>aBlock</span> <span class='n'>copy</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+    <span class='n'>aBlock</span><span class='p'>();</span>
+
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%d&quot;</span><span class='p'>,</span> <span class='p'>[</span><span class='n'>__globalObj</span> <span class='n'>retainCount</span><span class='p'>]);</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%d&quot;</span><span class='p'>,</span> <span class='p'>[</span><span class='n'>__staticObj</span> <span class='n'>retainCount</span><span class='p'>]);</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%d&quot;</span><span class='p'>,</span> <span class='p'>[</span><span class='n'>_instanceObj</span> <span class='n'>retainCount</span><span class='p'>]);</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%d&quot;</span><span class='p'>,</span> <span class='p'>[</span><span class='n'>localObj</span> <span class='n'>retainCount</span><span class='p'>]);</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%d&quot;</span><span class='p'>,</span> <span class='p'>[</span><span class='n'>blockObj</span> <span class='n'>retainCount</span><span class='p'>]);</span>
+<span class='p'>}</span>
+
+<span class='k'>@end</span>
+
+<span class='kt'>int</span> <span class='n'>main</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>argc</span><span class='p'>,</span> <span class='kt'>char</span> <span class='o'>*</span><span class='n'>argv</span><span class='p'>[])</span> 
+<span class='p'>{</span>
+    <span class='p'>@</span><span class='n'>autoreleasepool</span> <span class='p'>{</span>
+        <span class='n'>MyClass</span><span class='o'>*</span> <span class='n'>obj</span> <span class='o'>=</span> <span class='p'>[[[</span><span class='n'>MyClass</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+        <span class='p'>[</span><span class='n'>obj</span> <span class='n'>test</span><span class='p'>];</span>
+        <span class='k'>return</span> <span class='mi'>0</span><span class='p'>;</span>
+    <span class='p'>}</span>
+<span class='p'>}</span>
+</code></pre></div>
+<p>The result is <code>1 1 1 2 1</code></p>
+
+<p><code>__globalObj</code> and <code>__staticObj</code> have fixed memory location, therefore they won’t be retained when Block is copied.</p>
+
+<p><code>_instanceObj</code> is not retained directly when Block is copied. Instead, it retains self. As a result, we can read and write <code>_instanceObj</code> in Block.</p>
+
+<p><code>localObj</code> is retained and the retainCount is increased by default when Block is copied.</p>
+
+<p><code>blockObj</code> is not retained when Block is copied.</p>
+
+<p><em>For those who are not ObjC objects, such as GCD dispatch_queue_t, are not retained when Block is copied. We should be careful of this case.</em></p>
+
+<h3 id="retain_cycle">Retain cycle</h3>
+
+<p>The root of retain cycle is that Block and obj retain each other, as a consequence, nobody can be released. Taking the following code for example:</p>
+<div class='highlight'><pre><code class='objc'><span class='n'>ASIHTTPRequest</span> <span class='o'>*</span><span class='n'>request</span> <span class='o'>=</span> <span class='p'>[</span><span class='n'>ASIHTTPRequest</span> <span class='n'>requestWithURL</span><span class='o'>:</span><span class='n'>url</span><span class='p'>];</span>
+<span class='p'>[</span><span class='n'>request</span> <span class='n'>setCompletionBlock</span><span class='o'>:^</span><span class='p'>{</span>
+  <span class='n'>NSString</span><span class='o'>*</span> <span class='n'>string</span> <span class='o'>=</span> <span class='p'>[</span><span class='n'>request</span> <span class='n'>responseString</span><span class='p'>];</span>
+<span class='p'>}];</span>
+</code></pre></div><div class='highlight'><pre><code class='objc'>       <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+       <span class='o'>|</span> <span class='n'>request</span>   <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>Block</span>   <span class='o'>|</span>
+  <span class='o'>---&gt;</span> <span class='o'>|</span>           <span class='o'>|</span> <span class='o'>--------&gt;</span> <span class='o'>|</span>           <span class='o'>|</span>
+       <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>2</span>  <span class='o'>|</span> <span class='o'>&lt;--------</span> <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>1</span>  <span class='o'>|</span>
+       <span class='o'>|</span>           <span class='o'>|</span>           <span class='o'>|</span>           <span class='o'>|</span>
+       <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+</code></pre></div>
+<p>The solution is use weak reference to break retain cycle:</p>
+<div class='highlight'><pre><code class='objc'><span class='n'>__block</span> <span class='n'>ASIHTTPRequest</span> <span class='o'>*</span><span class='n'>request</span> <span class='o'>=</span> <span class='p'>[</span><span class='n'>ASIHTTPRequest</span> <span class='n'>requestWithURL</span><span class='o'>:</span><span class='n'>url</span><span class='p'>];</span>
+<span class='p'>[</span><span class='n'>request</span> <span class='n'>setCompletionBlock</span><span class='o'>:^</span><span class='p'>{</span>
+  <span class='n'>NSString</span><span class='o'>*</span> <span class='n'>string</span> <span class='o'>=</span> <span class='p'>[</span><span class='n'>request</span> <span class='n'>responseString</span><span class='p'>];</span>
+<span class='p'>}];</span>
+</code></pre></div><div class='highlight'><pre><code class='objc'>      <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+      <span class='o'>|</span> <span class='n'>request</span>   <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>Block</span>   <span class='o'>|</span>
+ <span class='o'>----&gt;|</span>           <span class='o'>|</span> <span class='o'>--------&gt;</span> <span class='o'>|</span>           <span class='o'>|</span>
+      <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>1</span>  <span class='o'>|</span> <span class='o'>&lt;</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>1</span>  <span class='o'>|</span>
+      <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>weak</span>    <span class='o'>|</span>           <span class='o'>|</span>
+      <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+</code></pre></div>
+<p>When <code>request</code> is released, the retainCount is 0. When request is dealloced, the Block will be released too.</p>
+<div class='highlight'><pre><code class='objc'>      <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+      <span class='o'>|</span> <span class='n'>request</span>   <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>Block</span>   <span class='o'>|</span>
+ <span class='o'>--</span><span class='n'>X</span><span class='o'>-&gt;|</span>           <span class='o'>|</span> <span class='o'>----</span><span class='n'>X</span><span class='o'>---&gt;</span> <span class='o'>|</span>           <span class='o'>|</span>
+      <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>0</span>  <span class='o'>|</span> <span class='o'>&lt;</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>0</span>  <span class='o'>|</span>
+      <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>weak</span>    <span class='o'>|</span>           <span class='o'>|</span>
+      <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+</code></pre></div>
+<p>The same trap as above:</p>
+<div class='highlight'><pre><code class='objc'><span class='n'>self</span><span class='p'>.</span><span class='n'>myBlock</span> <span class='o'>=</span> <span class='o'>^</span> <span class='p'>{</span>
+  <span class='p'>[</span><span class='n'>self</span> <span class='n'>doSomething</span><span class='p'>];</span>
+<span class='p'>};</span>
+</code></pre></div>
+<p>Here, self and myBlock retain each other. The solution is:</p>
+<div class='highlight'><pre><code class='objc'><span class='n'>__block</span> <span class='n'>MyClass</span><span class='o'>*</span> <span class='n'>weakSelf</span> <span class='o'>=</span> <span class='n'>self</span><span class='p'>;</span>
+<span class='n'>self</span><span class='p'>.</span><span class='n'>myBlock</span> <span class='o'>=</span> <span class='o'>^</span> <span class='p'>{</span>
+  <span class='p'>[</span><span class='n'>weakSelf</span> <span class='n'>doSomething</span><span class='p'>];</span>
+<span class='p'>};</span>
+</code></pre></div><div class='highlight'><pre><code class='objc'><span class='k'>@property</span> <span class='p'>(</span><span class='n'>nonatomic</span><span class='p'>,</span> <span class='n'>retain</span><span class='p'>)</span> <span class='n'>NSString</span><span class='o'>*</span> <span class='n'>someVar</span><span class='p'>;</span>
+
+<span class='n'>self</span><span class='p'>.</span><span class='n'>myBlock</span> <span class='o'>=</span> <span class='o'>^</span> <span class='p'>{</span>
+  <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>_someVer</span><span class='p'>);</span>
+<span class='p'>};</span>
+</code></pre></div>
+<p>Although we don’t retain self in the Block, we use the member variable <code>_someVer</code>. Using member variables in Block, the block retains self rather than member variables. The solution is as before:</p>
+<div class='highlight'><pre><code class='objc'><span class='k'>@property</span> <span class='p'>(</span><span class='n'>nonatomic</span><span class='p'>,</span> <span class='n'>retain</span><span class='p'>)</span> <span class='n'>NSString</span><span class='o'>*</span> <span class='n'>someVar</span><span class='p'>;</span>
+
+<span class='n'>__block</span> <span class='n'>MyClass</span><span class='o'>*</span> <span class='n'>weakSelf</span> <span class='o'>=</span> <span class='n'>self</span><span class='p'>;</span>
+<span class='n'>self</span><span class='p'>.</span><span class='n'>myBlock</span> <span class='o'>=</span> <span class='o'>^</span> <span class='p'>{</span>
+  <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>weakSelf</span><span class='p'>.</span><span class='n'>someVer</span><span class='p'>);</span>
+<span class='p'>};</span>
+</code></pre></div>
+<p>Not only retain cycle happens in two objects, it happens in many objects, which are more complicated.</p>
+<div class='highlight'><pre><code class='objc'><span class='n'>ClassA</span><span class='o'>*</span> <span class='n'>objA</span> <span class='o'>=</span> <span class='p'>[[[</span><span class='n'>ClassA</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+  <span class='n'>objA</span><span class='p'>.</span><span class='n'>myBlock</span> <span class='o'>=</span> <span class='o'>^</span><span class='p'>{</span>
+    <span class='p'>[</span><span class='n'>self</span> <span class='n'>doSomething</span><span class='p'>];</span>
+  <span class='p'>};</span>
+  <span class='n'>self</span><span class='p'>.</span><span class='n'>objA</span> <span class='o'>=</span> <span class='n'>objA</span><span class='p'>;</span>
+</code></pre></div><div class='highlight'><pre><code class='objc'>  <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+  <span class='o'>|</span>   <span class='n'>self</span>    <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>objA</span>    <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>Block</span>   <span class='o'>|</span>
+  <span class='o'>|</span>           <span class='o'>|</span> <span class='o'>--------&gt;</span> <span class='o'>|</span>           <span class='o'>|</span> <span class='o'>--------&gt;</span> <span class='o'>|</span>           <span class='o'>|</span>
+  <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>1</span>  <span class='o'>|</span>           <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>1</span>  <span class='o'>|</span>           <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>1</span>  <span class='o'>|</span>
+  <span class='o'>|</span>           <span class='o'>|</span>           <span class='o'>|</span>           <span class='o'>|</span>           <span class='o'>|</span>           <span class='o'>|</span>
+  <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+       <span class='o'>^</span>                                                <span class='o'>|</span>
+       <span class='o'>|</span>                                                <span class='o'>|</span>
+       <span class='o'>+------------------------------------------------+</span>
+</code></pre></div>
+<p>The same as before, using <code>__block</code> to break retain cycle</p>
+<div class='highlight'><pre><code class='objc'><span class='n'>ClassA</span><span class='o'>*</span> <span class='n'>objA</span> <span class='o'>=</span> <span class='p'>[[[</span><span class='n'>ClassA</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+
+<span class='n'>__block</span> <span class='n'>MyClass</span><span class='o'>*</span> <span class='n'>weakSelf</span> <span class='o'>=</span> <span class='n'>self</span><span class='p'>;</span>
+<span class='n'>objA</span><span class='p'>.</span><span class='n'>myBlock</span> <span class='o'>=</span> <span class='o'>^</span><span class='p'>{</span>
+  <span class='p'>[</span><span class='n'>weakSelf</span> <span class='n'>doSomething</span><span class='p'>];</span>
+<span class='p'>};</span>
+<span class='n'>self</span><span class='p'>.</span><span class='n'>objA</span> <span class='o'>=</span> <span class='n'>objA</span><span class='p'>;</span>
+</code></pre></div>
+<p><em>NOTICE: In MRC <code>__block</code> will not be retained while <code>__block</code> is retained in ARC. In ARC, we should use <code>__weak</code> or <code>__unsafe_unretained</code> for weak reference. <code>__weak</code> can only be used in iOS5 or later.</em></p>
+
+<h3 id="objects_which_block_uses_are_released_in_advance">Objects which Block uses are released in advance.</h3>
+
+<p>Looking at the following example, Not only do <code>request</code> holds Block, the other object also holds Block.</p>
+<div class='highlight'><pre><code class='objc'>      <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+      <span class='o'>|</span> <span class='n'>request</span>   <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>Block</span>   <span class='o'>|</span>   <span class='n'>objA</span>
+ <span class='o'>----&gt;|</span>           <span class='o'>|</span> <span class='o'>--------&gt;</span> <span class='o'>|</span>           <span class='o'>|&lt;--------</span>
+      <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>1</span>  <span class='o'>|</span> <span class='o'>&lt;</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>2</span>  <span class='o'>|</span>
+      <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>weak</span>    <span class='o'>|</span>           <span class='o'>|</span>
+      <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+</code></pre></div>
+<p>At the moment, if <code>request</code> was released by its owner</p>
+<div class='highlight'><pre><code class='objc'>      <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+      <span class='o'>|</span> <span class='n'>request</span>   <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>Block</span>   <span class='o'>|</span>   <span class='n'>objA</span>
+ <span class='o'>--</span><span class='n'>X</span><span class='o'>-&gt;|</span>           <span class='o'>|</span> <span class='o'>--------&gt;</span> <span class='o'>|</span>           <span class='o'>|&lt;--------</span>
+      <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>0</span>  <span class='o'>|</span> <span class='o'>&lt;</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>-</span> <span class='o'>|</span> <span class='n'>retain</span> <span class='mi'>1</span>  <span class='o'>|</span>
+      <span class='o'>|</span>           <span class='o'>|</span>   <span class='n'>weak</span>    <span class='o'>|</span>           <span class='o'>|</span>
+      <span class='o'>+-----------+</span>           <span class='o'>+-----------+</span>
+</code></pre></div>
+<p>The <code>request</code> has been released, but the Block is still hold by the objA. If trigger the block now, it will crash the entire app since the block access the released request. To avoid this circumstance, developers should pay attention to the lifecycle of Block.</p>
+
+<p>Another mistake which develoeprs usually make is using the <code>__block</code> incorrectly. For instance</p>
+<div class='highlight'><pre><code class='objc'><span class='n'>__block</span> <span class='n'>kkProducView</span><span class='o'>*</span> <span class='n'>weakSelf</span> <span class='o'>=</span> <span class='n'>self</span><span class='p'>;</span>
+<span class='n'>dispatch_async</span><span class='p'>(</span><span class='n'>dispatch_get_main_queue</span><span class='p'>(),</span> <span class='o'>^</span><span class='p'>{</span>
+  <span class='n'>weakSelf</span><span class='p'>.</span><span class='n'>xx</span> <span class='o'>=</span> <span class='n'>xx</span><span class='p'>;</span>
+<span class='p'>});</span>
+</code></pre></div>
+<p>When passing Block to a dispatch_async as a parameter, the system copys the block to Heap. If the Block reference instance variables, it will retain self too. Since the dispatch_async does not know when the self will be released, dispatch_async must retain self by itself to avoid self was released unespectedly. In this case, dispatch_async does not increase the retain count of self, before Block was executed, self maybe has been released, which may cause crash.</p>
+<div class='highlight'><pre><code class='objc'><span class='c1'>// MyClass.m</span>
+<span class='k'>-</span> <span class='p'>(</span><span class='kt'>void</span><span class='p'>)</span> <span class='nf'>test</span> <span class='p'>{</span>
+  <span class='n'>__block</span> <span class='n'>MyClass</span><span class='o'>*</span> <span class='n'>weakSelf</span> <span class='o'>=</span> <span class='n'>self</span><span class='p'>;</span>
+  <span class='kt'>double</span> <span class='n'>delayInSeconds</span> <span class='o'>=</span> <span class='mf'>10.0</span><span class='p'>;</span>
+  <span class='kt'>dispatch_time_t</span> <span class='n'>popTime</span> <span class='o'>=</span> <span class='n'>dispatch_time</span><span class='p'>(</span><span class='n'>DISPATCH_TIME_NOW</span><span class='p'>,</span> <span class='p'>(</span><span class='kt'>int64_t</span><span class='p'>)(</span><span class='n'>delayInSeconds</span> <span class='o'>*</span> <span class='n'>NSEC_PER_SEC</span><span class='p'>));</span>
+  <span class='n'>dispatch_after</span><span class='p'>(</span><span class='n'>popTime</span><span class='p'>,</span> <span class='n'>dispatch_get_main_queue</span><span class='p'>(),</span> <span class='o'>^</span><span class='p'>(</span><span class='kt'>void</span><span class='p'>){</span>
+    <span class='n'>NSLog</span><span class='p'>(</span><span class='s'>@&quot;%@&quot;</span><span class='p'>,</span> <span class='n'>weakSelf</span><span class='p'>);</span>
+<span class='p'>});</span>
+
+<span class='c1'>// other.m</span>
+<span class='n'>MyClass</span><span class='o'>*</span> <span class='n'>obj</span> <span class='o'>=</span> <span class='p'>[[[</span><span class='n'>MyClass</span> <span class='n'>alloc</span><span class='p'>]</span> <span class='n'>init</span><span class='p'>]</span> <span class='n'>autorelease</span><span class='p'>];</span>
+<span class='p'>[</span><span class='n'>obj</span> <span class='n'>test</span><span class='p'>];</span>
+</code></pre></div>
+<p>The <code>dispatch_after</code> simulate an async task, executed 10 seconds later. The <code>obj</code> has been released while the block is executing, which cause crash. The solution is removing the <code>__block</code>.</p>
+					<div class="meta">
+						<p class="date-publish">
+							Published: 
+							<date class="date-pub" title="2014-01-19T00:00:00+08:00" datetime="2014-01-19T00:00:00+08:00" pubdate>
+							<span class="month"><abbr>January</abbr></span>
+							<span class="day">19</span>
+							<span class="year">2014</span>
+							</date>
+						</p>
+						<ul class="list-category list-linear">
+							<li class="list-head">category: </li>
+							
+							
+
+
+  
+     
+    	<li><a href="/categories.html#foundations-ref">
+    		foundations <span>2</span>
+    	</a></li>
+    
+  
+
+
+						</ul>
+						<ul class="list-tag list-linear">
+							<li class="list-head">tags: </li>
+							
+							
+
+
+  
+     
+    	<li><a href="/tags.html#objc-ref">objc <span>2</span></a></li>
+     
+    	<li><a href="/tags.html#translation-ref">translation <span>1</span></a></li>
+    
+  
+
+
+
+						</ul>
+					</div><!-- meta -->
+				</div><!-- entry-content -->
+				<div class="misc-content">
+					<div class="social">
+						<ul class="list-linear">
+							<li><div class="twitter-tweet"><a href="https://twitter.com/share" class="twitter-share-button" data-count="horizontal" data-via="gaoyq" data-lang="en">Tweet</a></div></li>
+							<li><div class="twitter-follow"><a href="https://twitter.com/gaoyq" class="twitter-follow-button" data-show-count="false" data-lang="en"></a></div></li>
+						</ul>
+					</div>
+					
+					
+
+
+  <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_developer = 1;
+    var disqus_shortname = 'xmkevin'; // required: replace example with your forum shortname
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">blog comments powered by <span class="logo-disqus">Disqus</span></a>
+
+
+
+
+				</div><!-- misc-content -->
+				
+			</div><!-- bd -->
+			<footer class="unit-foot">
+				<div class="unit-inner unit-foot-inner">
+					<nav class="pagination">
+						<ul>
+							
+							<li class="prev"><a class="internal" rel="prev"  href="/foundations/2013/07/16/obj-c-variables-definition" title="View Objective C ivars' definition">&laquo; Objective C ivars' definition</a></li>
+							
+							
+							
+						</ul>
+					</nav>
+					<p class="gotop">
+						<a href="#page">Back to Top</a>
+					</p>
+				</div>
+			</footer>
+
+		</div><!-- content -->
+	</div><!-- unit-inner -->
+</article>
+
+
+				</div>
+			</div><!-- unit-inner -->
+		</div><!-- unit-body -->
+	</div><!-- body -->
+	<footer class="the-footer">
+		<div class="unit-foot">
+			<div class="unit-inner unit-foot-inner">
+				<div class="misc vcard">
+					<h4>about</h4>
+					<ul>
+						<li class="contact"><address><span class="author fn n">Kevin Gao</span> - <span class="fn email">tsing.gao@gmail.com</span></address></li>
+						<li class="github"><a href="http://github.com/xmkevin/" rel="me">github.com/xmkevin</a></li>
+						<li class="twitter"><a href="http://twitter.com/gaoyq/" rel="me">twitter.com/gaoyq</a></li>
+						<li class="rss"><a href="http://feeds.feedburner.com/">Subscribe to RSS Feed</a></li>
+					</ul>
+				</div><!-- misc -->
+				<p class="licence">
+					Theme: <a href="http://layouts-the.me">the_minimum</a> based on <a href="http://jekyllbootstrap.com/">Jekyll-bootstrap</a>.<br>
+					Powered by <a href="https://github.com/mojombo/jekyll">Jekyll</a>.
+				</p>
+			</div><!-- unit-foot-inner -->
+		</div><!-- unit-foot -->
+	</footer>
+</div><!-- page -->
+<script>
+	(function(d, s) {
+		var js, fjs = d.getElementsByTagName(s)[0], load = function(url, id) {
+		if (d.getElementById(id)) {return;}
+		js = d.createElement(s); js.src = url; js.id = id;
+		fjs.parentNode.insertBefore(js, fjs);
+		};
+	load('//platform.twitter.com/widgets.js', 'tweetjs');
+	// load('https://apis.google.com/js/plusone.js', 'gplus1js'); // Checkout http://j.mp/ApDgMr for usage html for this is <div class="g-plusone" data-size="medium"></div>
+	// load('//connect.facebook.net/en_US/all.js#xfbml=1', 'fbjssdk'); // Checkout http://j.mp/wZw2xR for using open graph protorol html for this is <div class="fb-like" data-href="/foundations/2014/01/19/how-to-use-blocks-with-gcd-correctly-to-avoid-retain-cycle" data-send="false" data-layout="button_count" data-width="450" data-show-faces="false" data-font="verdana"></div>
+	}(document, 'script'));
+</script>
+<script>
+/*! A fix for the iOS orientationchange zoom bug.Script by @scottjehl, rebound by @wilto. MIT License.*/
+(function(j){var i=j.document;if(!i.querySelectorAll){return}var l=i.querySelectorAll("meta[name=viewport]")[0],a=l&&l.getAttribute("content"),h=a+", maximum-scale=1.0",d=a+", maximum-scale=10.0",g=true,c=j.orientation,k=0;if(!l){return}function f(){l.setAttribute("content",d);g=true}function b(){l.setAttribute("content",h);g=false}function e(m){c=Math.abs(j.orientation);k=Math.abs(m.gamma);if(k>8&&c===0){if(g){b()}}else{if(!g){f()}}}j.addEventListener("orientationchange",f,false);j.addEventListener("deviceorientation",e,false)})(this);
+</script>
+
+  
+</body>
+</html>
+

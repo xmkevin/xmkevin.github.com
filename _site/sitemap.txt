@@ -8,4 +8,5 @@ http://xmkevin.github.io/rss.xml
 http://xmkevin.github.io/sitemap.txt
 http://xmkevin.github.io/tags.html
 
+http://xmkevin.github.io/foundations/2014/01/19/how-to-use-blocks-with-gcd-correctly-to-avoid-retain-cycle
 http://xmkevin.github.io/foundations/2013/07/16/obj-c-variables-definition
