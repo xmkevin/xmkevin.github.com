@@ -5,10 +5,34 @@
         <description>Xmkevin's Blog - Kevin Gao</description>
         <link>http://xmkevin.github.io</link>
         <link>http://xmkevin.github.io</link>
-        <lastBuildDate>2014-01-24T17:08:10+08:00</lastBuildDate>
-        <pubDate>2014-01-24T17:08:10+08:00</pubDate>
+        <lastBuildDate>2014-08-29T14:47:45+08:00</lastBuildDate>
+        <pubDate>2014-08-29T14:47:45+08:00</pubDate>
         <ttl>1800</ttl>
 
+
+        <item>
+                <title>Updating storyboard strings</title>
+                <description>&lt;p&gt;I use Storyboard to present UI in iOS applications, all work fine. However, when I update the UI, it’s hard to update the releated localization strings, I usually don’t know what strings should be added and translated. It must be a easier way to do this.&lt;/p&gt;
+
+&lt;h2 id=&quot;base_internationalization&quot;&gt;Base internationalization&lt;/h2&gt;
+
+&lt;p&gt;Let’s take a look at the Apple definition: “Base internationalization separates user-facing strings from .storyboard and .xib files. It relieves localizers of the need to modify .storyboard and .xib files in Interface Builder. Instead, an app has just one set of .storyboard and .xib files where strings are in the development language—the language that you used to create the .storyboard and .xib files. These .storyboard and .xib files are called the base internationalization. When you export localizations, the development language strings are the source that is translated into multiple languages.”&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;The key benefits of using base internationalization is we just modify a storyboard for all languages, all localization strings are sperated in different files.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;ibtools_to_generate_new_strings&quot;&gt;ibtools to generate new strings&lt;/h2&gt;
+
+&lt;p&gt;When you update the UI, such as add view controllers, you need to update the storyboard strings. ibtools is the tool to generate strings from Storyboard. Use the following code to generate a new strings&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;ibtool --export-strings-file new_file.strings file.storyboard&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;Now, we have two strings files for the same storyboard. One is file.strings, the other is new_file.strings. We also have some other file.strings in different langugages directories. What we should do is finding out the differences between new_file.strings and file.strings and updating the different strings to other language file.strings. If we do this manually, it’s very hard to find out the differences. Therefore, we need tools. The Localization Suite(http://www.loc-suite.org/) is a free tool to do such jobs.&lt;/p&gt;
+
+&lt;p&gt;You should copy the new_file.strings to the default language folder and replace the old one, then open the Localization suite, you can synchronize the strings, which is very easy.&lt;/p&gt;</description>
+                <link>http://xmkevin.github.io/2014/08/15/updating-storyboard-strings</link>
+                <guid>http://xmkevin.github.io/2014/08/15/updating-storyboard-strings</guid>
+                <pubDate>2014-08-15T00:00:00+08:00</pubDate>
+        </item>
 
         <item>
                 <title>How to use Blocks with GCD correctly to avoid retain cycle</title>
